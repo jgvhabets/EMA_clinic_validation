@@ -61,3 +61,88 @@ def get_percept_code(self):
         self.sub_lfp = rec_info["prc_codes"][self.sub]
 
     print(f'study sub {self.sub} linked to percept sub-{self.sub_lfp}')
+
+
+def get_ids():
+    """Load Excel file with subject IDs"""
+    dat_folder = load_utils.get_onedrive_path('emaval')
+    main_folder = os.path.dirname(dat_folder)
+    sub_df = read_excel(os.path.join(main_folder, 'ema_percept_id_overview.xlsx'))
+
+    # get empty df for IDs
+    ids = DataFrame(columns=['ema_id', 'prc_id', 'prc_ses'])
+
+    for i, ema_id in enumerate(sub_df['ema_id']):
+        # extract IDs and add "0"s to IDs (7 -> 07)
+        ema_id = "{:02d}".format(ema_id)
+        prc_id = "{:03d}".format(sub_df.iloc[i]['percept_id'])
+        prc_ses = sub_df.iloc[i]['session']
+        
+        ids.loc[f'ema{ema_id}'] = [ema_id, prc_id, prc_ses]
+
+
+    return ids
+
+
+def get_EMA_UPDRS_data(condition='m0s0',):
+    """Load etxracted EMA values from Excel file"""
+
+    assert condition.lower() in ['m0s0', 'm0s1', 'm1s0', 'm1s1'], (
+        'CONDITION SHOULD BE FORMAT MX-SX'
+    )
+    dat_folder = load_utils.get_onedrive_path('emaval')
+    main_folder = os.path.dirname(dat_folder)
+    # rename condition
+    condition = condition.replace('m', 'med')
+    condition = condition.replace('s', '-stim')
+    condition = condition.replace('0', 'OFF')
+    condition = condition.replace('1', 'ON')
+    # load EMA and UPDRS data
+    df = read_excel(
+        os.path.join(main_folder, 'EMA_UPDRS_recording_info.xlsx'),
+        sheet_name=condition
+    )
+    # get sub ids for EMA and LFP
+    ids = get_ids()
+
+    # get UPDRS relevant columns
+    col_ns = np.where([str(x).startswith('3') for x in df.iloc[0]])[0]
+    col_bool = [str(x).startswith('3') for x in df.iloc[0]]
+    col_names = df.iloc[0][col_bool].values
+    # create empty df with UPDRS columns
+    updrs_df = DataFrame(columns=col_names)
+    # fill rows with UPDRS sub data
+    for i, s in enumerate(df['study_code']):
+        if isinstance(s, str):
+            row = np.where(df['study_code'] == s)[0][0]
+            updrs_df.loc[s] = df.iloc[row][col_bool].values
+
+    # get EMA relevant columns
+    col_ns = np.where([str(x).startswith('Q') for x in df.iloc[0]])[0]
+    col_bool = [str(x).startswith('Q') for x in df.iloc[0]]
+    col_names = df.iloc[0][col_bool].values
+    # create empty df with UPDRS columns
+    ema_df = DataFrame(columns=col_names)
+    # fill rows with UPDRS sub data
+    for i, s in enumerate(df['study_code']):
+        if isinstance(s, str):
+            row = np.where(df['study_code'] == s)[0][0]
+            ema_df.loc[s] = df.iloc[row][col_bool].values
+
+
+    return ema_df, updrs_df
+
+
+def get_subscores(df, score_type='brady',):
+    sel = {}
+    # if data given is EMA
+    if df.keys()[0].startswith('Q'):
+        sel['brady'] = ['Q5', 'Q8']
+        # is data is UPDRS
+    elif df.keys()[0].startswith('3'):
+        sel['brady'] = ['3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.14']
+    
+    col_sel = [any([k.startswith(x) for x in sel['brady']])
+               for k in df.keys()]
+    
+    return col_sel
