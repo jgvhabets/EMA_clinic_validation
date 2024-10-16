@@ -64,7 +64,8 @@ def get_onedrive_path(folder: str = 'onedrive', USER='jeroen',):
 
     Folder has to be in ['onedrive', 'figures', 'bids_rawdata']
     """
-    folder_options = ['onedrive', 'home', 'figures', 'data', 'emaval']
+    folder_options = ['onedrive', 'home', 'figures', 'data', 'emaval',
+                      'emaval_fig']
     
     if folder.lower() not in folder_options:
         raise ValueError(
@@ -86,13 +87,16 @@ def get_onedrive_path(folder: str = 'onedrive', USER='jeroen',):
     path = join(path, onedrive_f[0])
     homepath = join(path, 'HOME monitoring PREP')
 
-    if folder == 'onedrive': return path
+    if folder.lower() == 'onedrive': return path
 
-    elif folder == 'home':
+    elif folder.lower() == 'home':
         return homepath
     
-    elif folder == 'emaval':
+    elif folder.lower() == 'emaval':
         return join(homepath, 'EMA_UPDRS_DATA', 'source_data')
+    
+    elif folder.lower() == 'emaval_fig':
+        return join(homepath, 'EMA validation', 'figures')
 
     else:  # must be data or figures
         return join(path, 'dysk_ecoglfp', folder.lower())

@@ -99,7 +99,7 @@ def get_EMA_UPDRS_data(condition='m0s0',):
     condition = condition.replace('1', 'ON')
     # load EMA and UPDRS data
     df = read_excel(
-        os.path.join(main_folder, 'EMA_UPDRS_recording_info.xlsx'),
+        os.path.join(main_folder, 'EMA_UPDRS_recording_data.xlsx'),
         sheet_name=condition
     )
     # get sub ids for EMA and LFP
@@ -133,16 +133,3 @@ def get_EMA_UPDRS_data(condition='m0s0',):
     return ema_df, updrs_df
 
 
-def get_subscores(df, score_type='brady',):
-    sel = {}
-    # if data given is EMA
-    if df.keys()[0].startswith('Q'):
-        sel['brady'] = ['Q5', 'Q8']
-        # is data is UPDRS
-    elif df.keys()[0].startswith('3'):
-        sel['brady'] = ['3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.14']
-    
-    col_sel = [any([k.startswith(x) for x in sel['brady']])
-               for k in df.keys()]
-    
-    return col_sel
