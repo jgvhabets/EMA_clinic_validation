@@ -85,7 +85,7 @@ def get_ids():
 
 
 def get_EMA_UPDRS_data(condition='m0s0',):
-    """Load etxracted EMA values from Excel file"""
+    """Load extracted EMA values from Excel file"""
 
     assert condition.lower() in ['m0s0', 'm0s1', 'm1s0', 'm1s1'], (
         'CONDITION SHOULD BE FORMAT MX-SX'
