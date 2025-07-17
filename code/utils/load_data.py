@@ -25,30 +25,6 @@ except:
     from PerceiveImport.classes import main_class
 
 
-def add_PyPerceive_repo():
-    # change enter path as follows: os.path.abspath(r'X:\xxxx\xxxx\PyPerceive/code')
-    # keep exact formatting: pp_code_path = os.path.abspath(r'PATH')
-    with open('paths.json', 'r') as f:
-        paths = json.load(f)
-
-    pp_code_path = fr'{paths["pyperceive_path"]}'
-    print(f'path extracting from JSON: {pp_code_path}')
-
-    # find path if not given
-    if (isinstance(pp_code_path, str) and
-        os.path.exists(os.path.abspath(pp_code_path)) == False):
-        
-        path = os.getcwd()
-        for i in range(20):
-            if 'PyPerceive' in os.listdir(path):
-                pp_code_path = os.path.join(path, 'PyPerceive', 'code')
-                break
-            else:
-                path = os.path.dirname(path)
-
-    sys.path.append(pp_code_path)
-    print(f'PyPerceive folder added: {pp_code_path}')
-
 
 def get_percept_code(self):
     """
@@ -73,6 +49,11 @@ def get_ids():
     ids = DataFrame(columns=['ema_id', 'prc_id', 'prc_ses'])
 
     for i, ema_id in enumerate(sub_df['ema_id']):
+        # SKIP ema31 as long as missing data not solved
+        if '31' in str(ema_id):
+            print(f'\n##### WARNING: HARDCODED EXCLUSING OF EMA31 bcs MISSINGs (get_ids())')
+            continue 
+        
         # extract IDs and add "0"s to IDs (7 -> 07)
         ema_id = "{:02d}".format(ema_id)
         prc_id = "{:03d}".format(sub_df.iloc[i]['percept_id'])
@@ -110,6 +91,10 @@ def ema_scale_converter(score_og, scale_og=5,):
             9: 5
         }
     
+    else:
+        raise ValueError('EMA scales has to be 5 or 9')
+    
+
     score_new = convert_scores[score_og]
 
     return score_new
@@ -148,37 +133,24 @@ def get_EMA_UPDRS_data(condition='m0s0',):
     )
     dat_folder = load_utils.get_onedrive_path('emaval_data')
 
-    # rename condition
-    condition2 = condition.replace('m', 'med')
-    condition2 = condition2.replace('s', '-stim')
-    condition2 = condition2.replace('0', 'OFF')
-    condition2 = condition2.replace('1', 'ON')
+    # load EMA and UPDRS data
+    filepath = os.path.join(dat_folder, 'EMA_val_scores.xlsx')
 
-    # load EMA and UPDRS data  -> currently only for UPDRS
-    filepath = os.path.join(dat_folder, 'EMA_UPDRS_recording_data.xlsx')
-    # print(f'{filepath}\n\texists?  -> {os.path.exists(filepath)}')
-    df = read_excel(filepath, sheet_name=condition2)  # deprecated EMA workflow
-    # get sub ids for EMA and LFP
-    ids = get_ids()
+    # load df with EMA and UPDRS tabs
+    ema_df = read_excel(filepath, sheet_name='EMA')
+    updrs_df = read_excel(filepath, sheet_name='UPDRS')
+    
+    # # get sub ids for EMA and LFP
+    # ids = get_ids()
 
-    ### get UPDRS relevant columns
-    col_ns = np.where([str(x).startswith('3') for x in df.iloc[0]])[0]
-    col_bool = [str(x).startswith('3') for x in df.iloc[0]]
-    col_names = df.iloc[0][col_bool].values
-    # create empty df with UPDRS columns
-    updrs_df = DataFrame(columns=col_names)
-    # fill rows with UPDRS sub data
-    for i, s in enumerate(df['study_code']):
-        if isinstance(s, str):
-            row = np.where(df['study_code'] == s)[0][0]
-            updrs_df.loc[s] = df.iloc[row][col_bool].values
+    
+    ### UPDRS df selection
+    # filter on defined condition (here, we lose all non-data rows!)
+    updrs_df = updrs_df[updrs_df['condition'] == condition].reset_index(drop=True)
 
 
-    ### get EMA data
-    ema_file = os.path.join(dat_folder, 'EMA_val_scores.xlsx')
-    ema_df = read_excel(ema_file, sheet_name='EMA')
-    # define which columns should be converted
-    i_dir_inv = np.where([v == 'directionality_inverse' for v in ema_df['study_id']])[0][0]
+    ### EMA data, define which columns should be converted
+    i_dir_inv = np.where([v == 'directionality_inverse' for v in ema_df['study_id']])[0][0]  # define row with directionality inverse
     i_likert = np.where([v == 'score_likert' for v in ema_df['study_id']])[0][0]
     scale_convert_cols = ema_df.keys()[[v == 1 for v in ema_df.iloc[i_likert]]]
     direct_convert_cols = ema_df.keys()[np.logical_and(
@@ -189,8 +161,6 @@ def get_EMA_UPDRS_data(condition='m0s0',):
     # filter on defined condition (here, we lose all non-data rows!)
     ema_df = ema_df[ema_df['condition'] == condition].reset_index(drop=True)
 
-    # define row with directionality inverse
-
     ### convert all 5-scale answers to 9-scale
     # loop over columns and questions, select on likert scale aka need for conversion
     for (i_col, colname), i_row in product(
@@ -199,7 +169,7 @@ def get_EMA_UPDRS_data(condition='m0s0',):
         # skip non EMA item columns
         if not colname.startswith('Q'): continue
         # skip missing rows
-        elif ema_df['missing'][i_row]: continue
+        elif ema_df['missing'][i_row] == 1: continue
         # skip none data rows
         elif not ema_df['study_id'][i_row].startswith('ema'): continue
         # skip nans (due to varying EMA versions)
@@ -221,25 +191,10 @@ def get_EMA_UPDRS_data(condition='m0s0',):
             ema_df.iloc[i_row, i_col] = score_converted
 
 
+    ### Sort df to emaID, due to unsorted excel table
+    ema_df = ema_df.iloc[np.argsort(ema_df['study_id'])].reset_index(drop=True)
+    updrs_df = updrs_df.iloc[np.argsort(updrs_df['study_id'])].reset_index(drop=True)
 
-
-    # deprecated data structure
-    """
-        filepath = os.path.join(dat_folder, 'EMA_UPDRS_recording_data.xlsx')
-        # print(f'{filepath}\n\texists?  -> {os.path.exists(filepath)}')
-        df = read_excel(filepath, sheet_name=condition)  # deprecated EMA workflow
-        
-        col_ns = np.where([str(x).startswith('Q') for x in df.iloc[0]])[0]
-        col_bool = [str(x).startswith('Q') for x in df.iloc[0]]
-        col_names = df.iloc[0][col_bool].values
-        # create empty df with UPDRS columns
-        ema_df = DataFrame(columns=col_names)
-        # fill rows with UPDRS sub data
-        for i, s in enumerate(df['study_code']):
-            if isinstance(s, str):
-                row = np.where(df['study_code'] == s)[0][0]
-                ema_df.loc[s] = df.iloc[row][col_bool].values
-    """
 
     return ema_df, updrs_df
 

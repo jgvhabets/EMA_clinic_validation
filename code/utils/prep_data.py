@@ -15,20 +15,21 @@ from mne.filter import filter_data
 
 
 
-def get_subscores(df, score_type='brady',):
+def get_subscores(df, dType, score_type='brady',):
     sel = {}
     # if data given is EMA
-    if df.keys()[0].startswith('Q'):
-        sel['brady'] = ['Q5', 'Q8']  # 'movement, hands
-        sel['gait'] = ['Q7',]  # gait
-        sel['tremor'] = ['Q6',]  # tremor
-        sel['nonmotor'] = ['Q1 ', 'Q2', 'Q3', 'Q4',]  # well being, motivation sadness energy        
+    if dType == 'EMA':
+        sel['brady'] = ['Q6', 'Q10']  # 'movement, hands
+        sel['gait'] = ['Q9',]  # gait
+        sel['tremor'] = ['Q7',]  # tremor
+        sel['nonmotor'] = ['Q1 ', 'Q2', 'Q3', 'Q4',]  # well being, motivation sadness energy
+        # 'Q5' is impulsivity; 'Q8' is dyskinesia
     
     # is data is UPDRS
-    elif df.keys()[0].startswith('3'):
-        sel['brady'] = ['3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.14']
-        sel['gait'] = ['3.10', '3.11', '3.12']  # gehen, freezing, post-stab
-        sel['tremor'] = ['3.15', '3.16', '3.17', '3.18',]  # tremor-rest, -post, -intent, -consist
+    elif dType == 'UPDRS':
+        sel['brady'] = ['3', '4', '5', '6', '7', '8', '14']
+        sel['gait'] = ['10', '11', '12']  # gehen, freezing, post-stab
+        sel['tremor'] = ['15', '16', '17', '18',]  # tremor-rest, -post, -intent, -consist
         if score_type == 'nonmotor':
             raise ValueError('no nonmotor UPDRS-III subscores')
     
@@ -49,21 +50,31 @@ def get_sum_df(EMA_dict, UPDRS_dict, MEAN_CORR: bool = True):
         ['EMA', 'UPDRS'],
         ['brady', 'tremor', 'gait', 'nonmotor']    
     ):
+        # print(f'\nstart: {COND, datname, subscore}')
+
         # no nonmotor subscore in UPDRS
-        if datname == 'UPDRS' and subscore == 'nonmotor': continue
+        if datname == 'UPDRS' and subscore == 'nonmotor':
+            print('...skip nonmotor subscores for UPDRS')
+            continue
+        
         # get correct data dict
         if datname == 'EMA': DAT = EMA_dict
         elif datname == 'UPDRS': DAT = UPDRS_dict
         else: raise ValueError('datname must EMA or UPDRS')
+        
         # select subscore items in resp data
-        sel_bool = get_subscores(DAT[COND], score_type=subscore,)
+        sel_bool = get_subscores(DAT[COND], score_type=subscore, dType=datname,)
         sel_cols = DAT[COND].keys()[sel_bool]
         sel_values = DAT[COND][sel_cols]
+        
         # add mean value to new df
-        SUMS[f'{datname}_SUM_{subscore}_{COND}'] = np.sum(sel_values, axis=1)
-        # correct NaN for missing
+        # gives sumscore for sub-category per sub-id/cond-id
+        SUMS[f'{datname}_SUM_{subscore}_{COND}'] = np.nansum(sel_values, axis=1)
+        
+        # correct NaN for missing (before zeros)
         nan_sel = isna(sel_values).all(axis=1).values
-        SUMS[f'{datname}_SUM_{subscore}_{COND}'][nan_sel] = np.NaN
+        SUMS.loc[nan_sel, f'{datname}_SUM_{subscore}_{COND}'] = np.NaN   # * sum(nan_sel)
+
 
     # Correct sums with individual means
     if MEAN_CORR:
@@ -71,14 +82,17 @@ def get_sum_df(EMA_dict, UPDRS_dict, MEAN_CORR: bool = True):
         for dtype, subscore in product(['EMA', 'UPDRS'],
                                        ['brady', 'tremor', 'gait', 'nonmotor']):
             # no nonmotor subscore in UPDRS
-            if dtype == 'UPDRS' and subscore == 'nonmotor': continue
+            if dtype == 'UPDRS' and subscore == 'nonmotor':
+                continue
 
-            sel = [k for k in SUMS.keys() if k.startswith(f'{dtype}_SUM_{subscore}')]
+            sel = [k for k in SUMS.keys()
+                   if k.startswith(f'{dtype}_SUM_{subscore}')]
             means = np.nanmean(SUMS[sel], axis=1)
             
             for COND in ['m0s0', 'm0s1', 'm1s0', 'm1s1']:
-                SUMS[f'{dtype}_SUM_{subscore}_{COND}'] = SUMS[f'{dtype}_SUM_{subscore}_{COND}'] - means
-            
+                # SUMS[f'{dtype}_SUM_{subscore}_{COND}'] = SUMS[f'{dtype}_SUM_{subscore}_{COND}'] - means
+                SUMS[f'{dtype}_SUM_{subscore}_{COND}'] -= means
+    
     return SUMS
 
 

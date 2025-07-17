@@ -39,7 +39,7 @@ def add_PyPerceive_repo():
         paths = json.load(f)
 
     pp_code_path = fr'{paths["pyperceive_path"]}'
-    print(f'path extracting from JSON: {pp_code_path}')
+    # print(f'pyPerceive-path extracting from JSON: {pp_code_path}')
 
     # find path if not given
     if (isinstance(pp_code_path, str) and
@@ -57,12 +57,10 @@ def add_PyPerceive_repo():
     print(f'PyPerceive folder added: {pp_code_path}')
 
 
-def get_onedrive_path(folder: str = 'onedrive', USER='jeroen',):
+def get_onedrive_path(folder: str = 'emaval', USER='jeroen',):
     """
     Device and OS independent function to find
     the synced-OneDrive folder where data is stored
-
-    Folder has to be in ['onedrive', 'figures', 'bids_rawdata']
     """
     folder_options = ['onedrive', 'home', 'figures', 'data', 'emaval',
                       'emaval_fig', 'emaval_data', 'emaval_dat']
@@ -84,8 +82,9 @@ def get_onedrive_path(folder: str = 'onedrive', USER='jeroen',):
     onedrive_f = [f for f in listdir(path) if logical_and(
         'onedrive' in f.lower(), 'charit' in f.lower()
     )]
-    path = join(path, onedrive_f[0])
+    path = join(path, onedrive_f[0])  # onedrive path
     homepath = join(path, 'HOME monitoring PREP')
+    emaval_path = join(homepath, 'PROJECTS', 'EMA validation')
 
     if folder.lower() == 'onedrive': return path
 
@@ -93,7 +92,6 @@ def get_onedrive_path(folder: str = 'onedrive', USER='jeroen',):
         return homepath
     
     elif 'emaval' in folder.lower():
-        emaval_path = join(homepath, 'PROJECTS', 'EMA validation')
     
         if 'fig' in folder.lower():
             return join(emaval_path, 'figures')
@@ -101,7 +99,10 @@ def get_onedrive_path(folder: str = 'onedrive', USER='jeroen',):
             return join(emaval_path, 'data', 'EMA_UPDRS_DATA')
         else:
             return emaval_path
-        
+    
+    elif folder.lower() == 'data': return join(emaval_path, 'data', 'EMA_UPDRS_DATA')
 
-    else:  # must be data or figures
-        return join(path, 'dysk_ecoglfp', folder.lower())
+    elif folder.lower() == 'figures': return join(emaval_path, 'figures')
+
+    else: return emaval_path
+
