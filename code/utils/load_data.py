@@ -119,7 +119,10 @@ def ema_directionality_converter(score_og,):
     return score_new
 
 
-def get_EMA_UPDRS_data(condition='m0s0',):
+def get_EMA_UPDRS_data(
+    condition='m0s0', SPLIT_TEST_TRAIN: str = 'none',
+    CONVERT_SCORES: bool = True,
+):
     """
     Load extracted EMA values from Excel file
     
@@ -131,9 +134,13 @@ def get_EMA_UPDRS_data(condition='m0s0',):
     assert condition.lower() in ['m0s0', 'm0s1', 'm1s0', 'm1s1'], (
         'CONDITION SHOULD BE FORMAT MX-SX'
     )
-    dat_folder = load_utils.get_onedrive_path('emaval_data')
+    assert SPLIT_TEST_TRAIN.lower() in ['none', 'test', 'train'], (
+        f'### Incorrect split-test-train: f{SPLIT_TEST_TRAIN}'
+    )
 
+    
     # load EMA and UPDRS data
+    dat_folder = load_utils.get_onedrive_path('emaval_data')
     filepath = os.path.join(dat_folder, 'EMA_val_scores.xlsx')
 
     # load df with EMA and UPDRS tabs
@@ -150,16 +157,38 @@ def get_EMA_UPDRS_data(condition='m0s0',):
 
 
     ### EMA data, define which columns should be converted
-    i_dir_inv = np.where([v == 'directionality_inverse' for v in ema_df['study_id']])[0][0]  # define row with directionality inverse
     i_likert = np.where([v == 'score_likert' for v in ema_df['study_id']])[0][0]
     scale_convert_cols = ema_df.keys()[[v == 1 for v in ema_df.iloc[i_likert]]]
-    direct_convert_cols = ema_df.keys()[np.logical_and(
-        [v == 1 for v in ema_df.iloc[i_likert]],
-        [v == 1 for v in ema_df.iloc[i_dir_inv]]
-    )]
+    if CONVERT_SCORES:
+        i_dir_inv = np.where([v == 'directionality_inverse' for v in ema_df['study_id']])[0][0]  # define row with directionality inverse
+        direct_convert_cols = ema_df.keys()[np.logical_and(
+            [v == 1 for v in ema_df.iloc[i_likert]],
+            [v == 1 for v in ema_df.iloc[i_dir_inv]]
+        )]
     
     # filter on defined condition (here, we lose all non-data rows!)
     ema_df = ema_df[ema_df['condition'] == condition].reset_index(drop=True)
+
+
+    ### Split test/training if defined
+    if SPLIT_TEST_TRAIN.lower() == 'train':
+        print(f'TODO: CREATE JSON WITH TEST STUDY IDS')
+        EMA_SEL = [True] * ema_df.shape[0]
+        UPDRS_SEL = [True] * updrs_df.shape[0]
+
+    elif SPLIT_TEST_TRAIN.lower() == 'test':
+        print(f'TODO: CREATE JSON WITH TEST STUDY IDS')
+        EMA_SEL = [True] * ema_df.shape[0]
+        UPDRS_SEL = [True] * updrs_df.shape[0]
+    
+    else:
+        EMA_SEL = [True] * ema_df.shape[0]
+        UPDRS_SEL = [True] * updrs_df.shape[0]
+
+    # select data on defined selection
+    ema_df = ema_df[EMA_SEL]
+    updrs_df = updrs_df[UPDRS_SEL]
+
 
     ### convert all 5-scale answers to 9-scale
     # loop over columns and questions, select on likert scale aka need for conversion
@@ -175,20 +204,22 @@ def get_EMA_UPDRS_data(condition='m0s0',):
         # skip nans (due to varying EMA versions)
         elif np.isnan(ema_df[colname][i_row]): continue
         
-        # convert 5 / 90-point scales of relevant scores
+        # convert 5 / 9-point scales of relevant scores
         if np.logical_and(ema_df['ema_scale'][i_row] == 5,
-                          colname in scale_convert_cols):  # skip rows with correct scaling
+                        colname in scale_convert_cols):  # skip rows with correct scaling
             score_og = ema_df[colname][i_row]
             score_converted = ema_scale_converter(score_og, scale_og=5)
             ema_df.iloc[i_row, i_col] = score_converted
+            print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (5-9)')
 
-        # convert directionality (9 is always best clinical answer)
-        # ASSUMES 9-SCALE ANSWER VALUE
-        if np.logical_and(ema_df.iloc[i_dir_inv, i_col],
-                          colname in direct_convert_cols):  # only for selected direct-changing questions
-            score_og = ema_df[colname][i_row]
-            score_converted = ema_directionality_converter(score_og)
-            ema_df.iloc[i_row, i_col] = score_converted
+        if CONVERT_SCORES:
+            # convert EMA-directionality (9 always optimal clinical answer, and ASSUMES 9-SCALE)
+            if np.logical_and(ema_df.iloc[i_dir_inv, i_col],
+                            colname in direct_convert_cols):  # only for selected direct-changing questions
+                score_og = ema_df[colname][i_row]
+                score_converted = ema_directionality_converter(score_og)
+                ema_df.iloc[i_row, i_col] = score_converted
+                print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (dir)')
 
 
     ### Sort df to emaID, due to unsorted excel table
