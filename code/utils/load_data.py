@@ -50,8 +50,12 @@ def get_ids():
 
     for i, ema_id in enumerate(sub_df['ema_id']):
         # SKIP ema31 as long as missing data not solved
+        # SKIP ema32-33-34 as long as missing data not solved
         if '31' in str(ema_id):
             print(f'\n##### WARNING: HARDCODED EXCLUSING OF EMA31 bcs MISSINGs (get_ids())')
+            continue 
+        if str(ema_id) in ['32', '33', '34']:
+            print(f'\n##### WARNING: HARDCODED EXCLUSING OF EMA32-33-34 bcs MISSINGs (get_ids())')
             continue 
         
         # extract IDs and add "0"s to IDs (7 -> 07)
@@ -124,7 +128,17 @@ def get_EMA_UPDRS_data(
     CONVERT_SCORES: bool = True,
 ):
     """
-    Load extracted EMA values from Excel file
+    Load extracted EMA values from Excel file.
+    
+    IMPORTANT:
+    From August 2025, EMA_val_scores.xlsx is double-checked
+    by Aicha. Ema01 - ema17 are copied from Laura's table
+    and contain inverted values for "Q3 - sadness" and
+    "Q7 - tremor" (originally "Q6 - tremor" since
+    "Q - Impulsivity" was not added yet, Q3 and Q7 for
+    ema01-ema17 should be inverted to get the original.
+    From ema18, Aicha's table contains the original EMA-
+    values which were not converted by Laura's data collection.
     
     - converts 5-scale-likert-answers into 9-scale
     - converts directionality of answers, so "9" is
@@ -210,16 +224,29 @@ def get_EMA_UPDRS_data(
             score_og = ema_df[colname][i_row]
             score_converted = ema_scale_converter(score_og, scale_og=5)
             ema_df.iloc[i_row, i_col] = score_converted
-            print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (5-9)')
+            # print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (5-9)')
 
         if CONVERT_SCORES:
             # convert EMA-directionality (9 always optimal clinical answer, and ASSUMES 9-SCALE)
             if np.logical_and(ema_df.iloc[i_dir_inv, i_col],
-                            colname in direct_convert_cols):  # only for selected direct-changing questions
+                              colname in direct_convert_cols):  # only for selected direct-changing questions
                 score_og = ema_df[colname][i_row]
                 score_converted = ema_directionality_converter(score_og)
                 ema_df.iloc[i_row, i_col] = score_converted
-                print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (dir)')
+                # print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (dir)')
+
+
+        ### Re-invert ema01-17, Q3 (Sadness) and Q7 (Tremor)
+        q_n = colname.split('_')[0]
+        if q_n not in ['Q3', 'Q7']: continue
+        id_n = ema_df['study_id'][i_row].split('ema')[1]
+        if int(id_n) > 17: continue  # only re-invert ema01-17
+        # re-invert
+        score = ema_df[colname][i_row]
+        score_REconverted = ema_directionality_converter(score)
+        ema_df.iloc[i_row, i_col] = score_REconverted
+        print(f'RE-INVERT... ema-N: {id_n}, {colname}:\t{score} --> {score_REconverted}')
+
 
 
     ### Sort df to emaID, due to unsorted excel table

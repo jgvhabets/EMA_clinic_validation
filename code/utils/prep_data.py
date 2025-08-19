@@ -70,8 +70,8 @@ def get_sum_df(EMA_dict, UPDRS_dict, MEAN_CORR: bool = True):
         # add mean value to new df
         # gives sumscore for sub-category per sub-id/cond-id
         SUMS[f'{datname}_SUM_{subscore}_{COND}'] = np.nansum(sel_values, axis=1)
-        # test max score for tremor
-        if subscore == 'tremor': SUMS[f'{datname}_SUM_{subscore}_{COND}'] = np.nanmax(sel_values, axis=1)
+        # # test max score for tremor
+        # if subscore == 'tremor': SUMS[f'{datname}_SUM_{subscore}_{COND}'] = np.nanmax(sel_values, axis=1)
         
         # correct NaN for missing (before zeros)
         nan_sel = isna(sel_values).all(axis=1).values
