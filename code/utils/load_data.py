@@ -49,14 +49,11 @@ def get_ids():
     ids = DataFrame(columns=['ema_id', 'prc_id', 'prc_ses'])
 
     for i, ema_id in enumerate(sub_df['ema_id']):
-        # SKIP ema31 as long as missing data not solved
-        # SKIP ema32-33-34 as long as missing data not solved
-        if '31' in str(ema_id):
-            print(f'\n##### WARNING: HARDCODED EXCLUSING OF EMA31 bcs MISSINGs (get_ids())')
-            continue 
-        if str(ema_id) in ['32', '33', '34']:
-            print(f'\n##### WARNING: HARDCODED EXCLUSING OF EMA32-33-34 bcs MISSINGs (get_ids())')
-            continue 
+        
+        # # SKIP ema31-32-33-34 as long as missing data not solved
+        # if str(ema_id) in ['31', '32', '33', '34']:
+        #     print(f'\n##### WARNING: HARDCODED EXCLUSING OF EMA32-33-34 bcs MISSINGs (get_ids())')
+        #     continue 
         
         # extract IDs and add "0"s to IDs (7 -> 07)
         ema_id = "{:02d}".format(ema_id)
