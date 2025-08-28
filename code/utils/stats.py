@@ -4,6 +4,7 @@ scripts for statistical analysis
 
 import numpy as np
 
+
 def calc_expl_variances(fitted_model):
 
     # Fixed-effects variance

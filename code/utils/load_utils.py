@@ -106,3 +106,24 @@ def get_onedrive_path(folder: str = 'emaval', USER='jeroen',):
 
     else: return emaval_path
 
+
+def add_home_repo():
+    """
+    assumes a folder structure in which this repo-folder
+    (EMA_clinic_validation) and 
+    """
+    cd = getcwd()
+
+    while not cd.endswith('projects'):
+        cd = dirname(cd)
+
+    if 'dbs_in_the_wild' in listdir(cd):
+        home_repo_path = join(cd, 'dbs_in_the_wild')
+
+    elif 'HOME_DBS' in listdir(cd):
+        home_repo_path = join(cd, 'HOME_DBS', 'code', 'dbs_in_the_wild')
+
+    else:
+        raise ValueError(f'dbs_in_the_wild and HOME_DBS not in {cd}')
+
+    sys.path.append(home_repo_path)
