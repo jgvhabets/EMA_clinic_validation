@@ -114,8 +114,10 @@ def ema_directionality_converter(score_og,):
         8: 2,
         9: 1
     }
-    
-    score_new = convert_scores[score_og]
+
+    if np.isnan(score_og): score_new = np.nan
+    else: score_new = convert_scores[score_og]
+
 
     return score_new
 
@@ -254,3 +256,31 @@ def get_EMA_UPDRS_data(
     return ema_df, updrs_df
 
 
+def load_ema_df(sub_id, ses):
+
+    # add home_dbs repo
+    load_utils.add_home_repo()
+
+    import load_raw.main_load_raw as load_home
+    # import helper_functions.helpers as home_helpers
+    import helper_functions.ema_utils as home_utils
+
+
+    ses_class = load_home.load_subject(sub_id, ses)
+    df = home_utils.extract_ema_reports(ses_class)
+    df = home_utils.rename_questions(df, ses_class.EMA_reports_questions)
+
+    df = df.drop_duplicates(subset="datetime", keep="first").reset_index(drop=True)  # what is with index?
+    
+    return df
+
+
+def filtered_submitted_ema_df(sub_id, ses):
+    
+    df = load_ema_df(sub_id, ses)
+    df_sub = df[df['Submission'] == '1'].copy()
+    df_sub['End Time'] = home_utils.convert_column_to_datetime(df_sub['End Time'])
+    df_sub['Start Time'] = home_utils.convert_column_to_datetime(df_sub['Start Time'])
+    df_sub['Scheduled Time'] = home_utils.convert_column_to_datetime(df_sub['Scheduled Time'])
+    
+    return df_sub

@@ -2,7 +2,9 @@
 Process different data modalities before analysis
 """
 # custom
-from utils.load_data import get_ids
+from utils.load_data import (
+    get_ids, ema_directionality_converter
+)
 from utils.load_utils import get_onedrive_path
 
 # public
@@ -19,10 +21,13 @@ def get_subscores(df, dType, score_type='brady',):
     sel = {}
     # if data given is EMA
     if dType == 'EMA':
-        sel['brady'] = ['Q6', 'Q10']  # 'movement, hands
-        sel['gait'] = ['Q9',]  # gait
-        sel['tremor'] = ['Q7',]  # tremor
-        sel['nonmotor'] = ['Q1 ', 'Q2', 'Q3', 'Q4',]  # well being, motivation sadness energy
+        sel['brady'] = ['Q6', 'Q10',
+                        'general mov', 'hands']  # 'movement, hands
+        sel['gait'] = ['Q9', 'walking']  # gait
+        sel['tremor'] = ['Q7', 'tremor']  # tremor
+        sel['nonmotor'] = ['Q1 ', 'Q2', 'Q3', 'Q4',
+                           'overall wellb', 'motivation',
+                           'sadness', 'energy']  # well being, motivation sadness energy
         # 'Q5' is impulsivity; 'Q8' is dyskinesia
     
     # is data is UPDRS
@@ -40,7 +45,9 @@ def get_subscores(df, dType, score_type='brady',):
 
 
 def get_sum_df(EMA_dict, UPDRS_dict, MEAN_CORR: bool = True):
-
+    """
+    for EMA x UPDRS dataframe, including 4 states
+    """
     ids = get_ids()
 
     SUMS = pd.DataFrame(index=ids.index)
@@ -62,27 +69,33 @@ def get_sum_df(EMA_dict, UPDRS_dict, MEAN_CORR: bool = True):
         elif datname == 'UPDRS': DAT = UPDRS_dict
         else: raise ValueError('datname must EMA or UPDRS')
         
-        # select subscore items in resp data
-        sel_bool = get_subscores(DAT[COND], score_type=subscore, dType=datname,)
-        sel_cols = DAT[COND].keys()[sel_bool]
-        sel_values = DAT[COND][sel_cols]
+        # # select subscore items in resp data
+        # sel_bool = get_subscores(DAT[COND], score_type=subscore, dType=datname,)
+        # sel_cols = DAT[COND].keys()[sel_bool]
+        # sel_values = DAT[COND][sel_cols]
         
-        # add mean value to new df
-        # gives sumscore for sub-category per sub-id/cond-id
-        sum_values = np.nansum(sel_values, axis=1)
+        # # add mean value to new df
+        # # gives sumscore for sub-category per sub-id/cond-id
+        # sum_values = np.nansum(sel_values, axis=1)
 
-        if datname == 'EMA' and subscore == 'brady':
-            sum_values /= 2  # EMA brady exists of two questions, take mean answer
-        elif datname == 'EMA' and subscore == 'nonmotor':
-            sum_values /= 4  # EMA nonmotor exists of four questions, take mean answer
+        # if datname == 'EMA' and subscore == 'brady':
+        #     sum_values /= 2  # EMA brady exists of two questions, take mean answer
+        # elif datname == 'EMA' and subscore == 'nonmotor':
+        #     sum_values /= 4  # EMA nonmotor exists of four questions, take mean answer
         
+        # TODO: test in 4-state data
+        sum_values = add_subscores(
+            df=DAT[COND], subscore=subscore, dtype=datname,
+        )
+
         SUMS[f'{datname}_SUM_{subscore}_{COND}'] = sum_values
+        
         # # test max score for tremor
         # if subscore == 'tremor': SUMS[f'{datname}_SUM_{subscore}_{COND}'] = np.nanmax(sel_values, axis=1)
         
-        # correct NaN for missing (before zeros)
-        nan_sel = pd.isna(sel_values).all(axis=1).values
-        SUMS.loc[nan_sel, f'{datname}_SUM_{subscore}_{COND}'] = np.NaN   # * sum(nan_sel)
+        # # correct NaN for missing (before zeros) -> included in function above
+        # nan_sel = pd.isna(sel_values).all(axis=1).values
+        # SUMS.loc[nan_sel, f'{datname}_SUM_{subscore}_{COND}'] = np.NaN   # * sum(nan_sel)
 
 
     # Correct sums with individual means
@@ -102,10 +115,134 @@ def get_sum_df(EMA_dict, UPDRS_dict, MEAN_CORR: bool = True):
                 # SUMS[f'{dtype}_SUM_{subscore}_{COND}'] = SUMS[f'{dtype}_SUM_{subscore}_{COND}'] - means
                 SUMS[f'{dtype}_SUM_{subscore}_{COND}'] -= means
     
-    # Remove missings or corrupted data
+    # Remove missings or corrupted data (due to EMA failure during 4states)
     SUMS = remove_missing_and_corrupts(SUMS)
 
     return SUMS
+
+
+def prepare_home_emas(
+    sub_df,
+    mean_correct_method: str = 'mean'):
+    """
+    All home recordings were performed on 9-point
+    scaling.
+
+    Input:
+    - sub_df: ema df per sub
+    - mean_correct_method: mean / median / mid_range
+    """
+    item_names = [
+        'overall wellbeing', 'motivation', 'sadness',
+       'energy level', 'risky', 'general movement',
+       'tremor', 'dyskinesia', 'walking', 'hands',
+    ]
+
+    assert mean_correct_method in ['mean', 'median', 'mid_range'], (
+        f'unvalid mean correction method ({mean_correct_method})'
+    )
+
+    # INVERT DIRECTIONALITY, only for 'negatively' phrased items
+    cols_to_invert = [
+        'sadness', 'risky', 'tremor', 'dyskinesia',
+    ]
+
+    for i_col, col in enumerate(sub_df.columns):
+        if col not in cols_to_invert: continue
+
+        for i_row in np.arange(sub_df.shape[0]):
+            score_og = sub_df[col][i_row]
+            temp_score = ema_directionality_converter(score_og,)
+            sub_df.iloc[i_row, i_col] = temp_score
+
+    # ADD SUBSCORES
+    for subscore in ['brady', 'tremor', 'gait', 'nonmotor']:
+        sum_values = add_subscores(
+            df=sub_df, subscore=subscore, dtype='EMA',
+        )
+        sub_df[f'sum_{subscore}'] = sum_values
+        item_names.append(f'{sum}_subscore')
+
+    
+    # MEAN CORRECT
+    for col in sub_df.columns:
+        if col not in item_names: continue
+        if mean_correct_method == 'mean':
+            corr_value = np.nanmean(sub_df[col])
+        elif mean_correct_method == 'median':
+            corr_value = np.nanmedian(sub_df[col])
+        elif mean_correct_method == 'mid_range':
+            corr_value = (np.nanmax(sub_df[col]) + np.nanmin(sub_df[col])) / 2
+        # subtract correcting value
+        sub_df[col] -= corr_value
+
+
+    return sub_df
+
+
+def add_subscores(df, subscore, dtype):
+    """
+    - df: EMA values, single sub
+    - subscore: brady/tremor/nonmotor/gait
+    - dtype: EMA or UPDRS
+    """
+    # select subscore items in resp data
+    sel_bool = get_subscores(df, score_type=subscore, dType=dtype,)
+    sel_cols = df.keys()[sel_bool]
+    sel_values = df[sel_cols]
+    
+    # add mean value to new df
+    # gives sumscore for sub-category per sub-id/cond-id
+    sum_values = np.nansum(sel_values, axis=1).astype(float)
+
+    if dtype.lower() == 'ema' and subscore.lower() == 'brady':
+        sum_values /= 2  # EMA brady exists of two questions, take mean answer
+    elif dtype.lower() == 'ema' and subscore.lower() == 'nonmotor':
+        sum_values /= 4  # EMA nonmotor exists of four questions, take mean answer
+
+    # correct NaN for missing (before zeros) -> included in function above
+    nan_sel = pd.isna(sel_values).all(axis=1).values
+    sum_values[nan_sel] = np.NaN
+        
+    return sum_values
+
+
+
+def prepare_ema_df(df, INVERT_NEG_ITEMS: bool = True,
+                   ADD_MEANMOVE: bool = True,
+                   ITEMS_TO_INVERT = ['sadness', 'risky',
+                                      'tremor', 'dyskinesia']):
+    """
+    designed for naturalistic data from Virgobit app
+    """
+    # clean None values into np.nan
+    df = df.applymap(lambda x: np.nan if x is None else x)
+
+    # change numerical strings into floats
+    ITEM_COLS = ['overall wellbeing', 'motivation', 'sadness',
+                 'energy level', 'risky', 'general movement', 
+                 'tremor', 'dyskinesia',
+                 'walking', 'hands', 'ON/OFF']
+    for col in ITEM_COLS:
+        df[col] = df[col].astype(np.float32)
+
+    # add mean movement column
+    if ADD_MEANMOVE:
+        df['move_mean'] = np.nanmean(
+            df[['hands', 'general movement']].astype(np.float32),
+            axis=1,
+        )
+
+    if INVERT_NEG_ITEMS:
+        print('TODO: CHECK WHY NOT ALL SUBS ARE INVERTED!!!!!!')
+        for i, col in product(np.arange(df.shape[0]),
+                              ITEMS_TO_INVERT):
+            new_col = [ema_directionality_converter(v) for v in df[col]]
+            df[col] = new_col
+
+    
+    return df
+
 
 
 def remove_missing_and_corrupts(sumdf):
@@ -166,34 +303,6 @@ def get_lmm_df(sumdf):
 
 
 
-def get_lfp_times():
-    """Load JSON file with task timings during LFP recording"""
-    dat_folder = get_onedrive_path('emaval')
-    main_folder = dirname(dat_folder)
-    filepath = join(main_folder, 'source_data', 'lfp_time_selections.json')
-
-    # load timings
-    with open(filepath, 'r') as f:
-        times = json.load(f)
-
-    return times
-
-
-def lfp_filter(signal, Fs=250, low=2, high=48,):
-    
-    filtered = filter_data(
-        data=signal,
-        sfreq=Fs,
-        l_freq=low,
-        h_freq=high,
-        method='fir',
-        fir_window='hamming',
-        verbose=False,
-    )
-
-    return filtered
-
-
 def get_train_test_split(sumdf):
     
     states = ['m0s0', 'm0s1', 'm1s0', 'm1s1']
@@ -230,3 +339,5 @@ def get_train_test_split(sumdf):
     train_subs = fullsubs[4:] + nansubs[4:]
 
     return train_subs, test_subs
+
+

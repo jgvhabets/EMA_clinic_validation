@@ -1,5 +1,5 @@
 import sys
-from os import listdir, getcwd
+from os import listdir, getcwd, chdir
 from os.path import join, dirname, abspath, exists
 import json
 from datetime import date
@@ -107,10 +107,10 @@ def get_onedrive_path(folder: str = 'emaval', USER='jeroen',):
     else: return emaval_path
 
 
-def add_home_repo():
+def add_home_repo(return_repo_dir: bool = False,):
     """
     assumes a folder structure in which this repo-folder
-    (EMA_clinic_validation) and 
+    (EMA_clinic_validation) and (dbs_in_the_wild repo)
     """
     cd = getcwd()
 
@@ -127,3 +127,5 @@ def add_home_repo():
         raise ValueError(f'dbs_in_the_wild and HOME_DBS not in {cd}')
 
     sys.path.append(home_repo_path)
+    
+    if return_repo_dir: return home_repo_path
