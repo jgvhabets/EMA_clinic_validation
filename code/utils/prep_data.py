@@ -2,9 +2,7 @@
 Process different data modalities before analysis
 """
 # custom
-from utils.load_data import (
-    get_ids, ema_directionality_converter
-)
+from utils.load_data import get_ids
 from utils.load_utils import get_onedrive_path
 
 # public
@@ -205,43 +203,6 @@ def add_subscores(df, subscore, dtype):
     sum_values[nan_sel] = np.NaN
         
     return sum_values
-
-
-
-def prepare_ema_df(df, INVERT_NEG_ITEMS: bool = True,
-                   ADD_MEANMOVE: bool = True,
-                   ITEMS_TO_INVERT = ['sadness', 'risky',
-                                      'tremor', 'dyskinesia']):
-    """
-    designed for naturalistic data from Virgobit app
-    """
-    # clean None values into np.nan
-    df = df.applymap(lambda x: np.nan if x is None else x)
-
-    # change numerical strings into floats
-    ITEM_COLS = ['overall wellbeing', 'motivation', 'sadness',
-                 'energy level', 'risky', 'general movement', 
-                 'tremor', 'dyskinesia',
-                 'walking', 'hands', 'ON/OFF']
-    for col in ITEM_COLS:
-        df[col] = df[col].astype(np.float32)
-
-    # add mean movement column
-    if ADD_MEANMOVE:
-        df['move_mean'] = np.nanmean(
-            df[['hands', 'general movement']].astype(np.float32),
-            axis=1,
-        )
-
-    if INVERT_NEG_ITEMS:
-        print('TODO: CHECK WHY NOT ALL SUBS ARE INVERTED!!!!!!')
-        for i, col in product(np.arange(df.shape[0]),
-                              ITEMS_TO_INVERT):
-            new_col = [ema_directionality_converter(v) for v in df[col]]
-            df[col] = new_col
-
-    
-    return df
 
 
 
