@@ -15,6 +15,10 @@ from itertools import compress, product
 
 import utils.load_utils as load_utils
 
+from dbs_home.preprocessing.preparing_ema import (
+    ema_directionality_converter
+)
+
 try:
     from PerceiveImport.classes import main_class
 except:
@@ -205,7 +209,9 @@ def get_EMA_UPDRS_data(
         if np.logical_and(ema_df['ema_scale'][i_row] == 5,
                         colname in scale_convert_cols):  # skip rows with correct scaling
             score_og = ema_df[colname][i_row]
-            score_converted = ema_scale_converter(score_og, scale_og=5)
+            score_converted = ema_scale_converter(
+                score_og, scale_og=5,
+            )
             ema_df.iloc[i_row, i_col] = score_converted
             # print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (5-9)')
 
@@ -214,7 +220,9 @@ def get_EMA_UPDRS_data(
             if np.logical_and(ema_df.iloc[i_dir_inv, i_col],
                               colname in direct_convert_cols):  # only for selected direct-changing questions
                 score_og = ema_df[colname][i_row]
-                score_converted = ema_directionality_converter(score_og)
+                score_converted = ema_directionality_converter(
+                    score_og
+                )
                 ema_df.iloc[i_row, i_col] = score_converted
                 # print(f'....row {i_row}, {colname}:\t{score_og} --> {score_converted} (dir)')
 

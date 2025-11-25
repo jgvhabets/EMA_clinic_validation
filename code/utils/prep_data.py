@@ -200,7 +200,7 @@ def add_subscores(df, subscore, dtype):
 
     # correct NaN for missing (before zeros) -> included in function above
     nan_sel = pd.isna(sel_values).all(axis=1).values
-    sum_values[nan_sel] = np.NaN
+    sum_values[nan_sel] = np.nan
         
     return sum_values
 
