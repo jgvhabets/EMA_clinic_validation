@@ -184,12 +184,12 @@ def get_iqr_acc(self):
 
 def get_tremor_power_ratio_3_7_over_3_7_plus_7_12(self):
     """
-    3–7 Hz: [3, 7)  -> include_low=True, include_high=False
+    3–7 Hz: [3, 7)  -> include_low=True, include_high=True
     7–12 Hz: [7,12] -> include_low=True, include_high=True
     """
 
     pow_3_7 = get_pow(self, 3.0, 7.0,
-                      include_low=True, include_high=False)
+                      include_low=True, include_high=True)
     pow_7_12 = get_pow(self, 7.0, 12.0,
                        include_low=True, include_high=True)
 
@@ -215,7 +215,7 @@ def get_pow_ratio_to_total(self, f_lo, f_hi,
 
     # 3–7 Hz (>=3 & <7) over total:
     # get_pow_ratio_to_total(self, 3.0, 7.0,
-    #                        include_low=True, include_high=False)
+    #                        include_low=True, include_high=True)
     """
 
     band_pow = get_pow(
