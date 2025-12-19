@@ -512,3 +512,134 @@ def get_lag_at_max_norm_xcorr(self):
     lag_at_max = float(lags[idx])
 
     return lag_at_max
+    
+def get_tremor_power_ratio_1_3_over_1_3_plus_3_12(self):
+    """
+    ratio = pow(1–3) / (pow(1–3) + pow(3–12))
+    """
+
+    pow_1_3 = get_pow(self, 1.0, 3.0,
+                      include_low=True, include_high=True)
+    pow_3_12 = get_pow(self, 3.0, 12.0,
+                       include_low=True, include_high=True)
+
+    if np.isnan(pow_1_3) or np.isnan(pow_3_12):
+        ratio = np.nan
+        return ratio
+
+    denom = pow_1_3 + pow_3_12
+    if denom <= 0:
+        ratio = np.nan
+        return ratio
+
+    ratio = pow_1_3 / denom
+
+    return ratio
+
+
+def get_tremor_power_ratio_3_12_over_1_3_plus_3_12(self):
+    """
+    ratio = pow(3–12) / (pow(1–3) + pow(3–12))
+    """
+
+    pow_1_3 = get_pow(self, 1.0, 3.0,
+                      include_low=True, include_high=True)
+    pow_3_12 = get_pow(self, 3.0, 12.0,
+                       include_low=True, include_high=True)
+
+    if np.isnan(pow_1_3) or np.isnan(pow_3_12):
+        ratio = np.nan
+        return ratio
+
+    denom = pow_1_3 + pow_3_12
+    if denom <= 0:
+        ratio = np.nan
+        return ratio
+
+    ratio = pow_3_12 / denom
+
+    return ratio
+
+
+def get_dom_freq_above_3(self, include_low=False):
+    """
+    dominant frequency for f > 3 Hz (default) or f >= 3 Hz (include_low=True)
+
+    NOTE: your get_dom_freq requires both f_lo and f_hi,
+          so f_hi is set to max(self.fx).
+    """
+
+    if not hasattr(self, "fx") or self.fx is None or len(self.fx) == 0:
+        dom_freq_above_3 = np.nan
+        return dom_freq_above_3
+
+    f_hi = float(np.nanmax(self.fx))
+    if not np.isfinite(f_hi):
+        dom_freq_above_3 = np.nan
+        return dom_freq_above_3
+
+    dom_freq_above_3 = get_dom_freq(
+        self,
+        3.0,
+        f_hi,
+        include_low=include_low,
+        include_high=True,
+    )
+
+    return dom_freq_above_3
+
+
+def get_peak_pow_dom_freq_above_3(self, include_low=False):
+    """
+    peak power (max psx) within f > 3 Hz (or >= 3 Hz).
+    this corresponds to the power at the dominant peak above 3 Hz.
+    """
+
+    if not hasattr(self, "fx") or not hasattr(self, "psx"):
+        peak_pow_above_3 = np.nan
+        return peak_pow_above_3
+
+    if self.fx is None or self.psx is None:
+        peak_pow_above_3 = np.nan
+        return peak_pow_above_3
+
+    fx = np.asarray(self.fx)
+    psx = np.asarray(self.psx)
+
+    if include_low:
+        mask = (fx >= 3.0)
+    else:
+        mask = (fx > 3.0)
+
+    mask = mask & np.isfinite(fx) & np.isfinite(psx)
+    if not np.any(mask):
+        peak_pow_above_3 = np.nan
+        return peak_pow_above_3
+
+    peak_pow_above_3 = float(np.max(psx[mask]))
+
+    return peak_pow_above_3
+
+
+def get_peak_pow_dom_freq_above_3_ratio_total(self, include_low=False):
+    """
+    ratio = peak_pow_above_3 / total_pow
+    """
+
+    peak_pow_above_3 = get_peak_pow_dom_freq_above_3(self, include_low=include_low)
+    if peak_pow_above_3 is None or np.isnan(peak_pow_above_3):
+        ratio = np.nan
+        return ratio
+
+    if not hasattr(self, "psx") or self.psx is None:
+        ratio = np.nan
+        return ratio
+
+    total_pow = float(np.nansum(self.psx))
+    if not np.isfinite(total_pow) or total_pow <= 0:
+        ratio = np.nan
+        return ratio
+
+    ratio = peak_pow_above_3 / total_pow
+
+    return ratio
