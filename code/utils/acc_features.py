@@ -44,7 +44,8 @@ def get_psd(self):
     return fx, psx
 
 
-def get_pow(self, f_lo, f_hi, include_low=True, include_high=True):
+def get_pow(self, f_lo, f_hi, include_low=True, include_high=True,
+            RATIO_TO_ALL_HZ=False,):
     """
     examples: 
 
@@ -70,6 +71,9 @@ def get_pow(self, f_lo, f_hi, include_low=True, include_high=True):
     f_sel = cond_lo & cond_hi
 
     pow = sum(self.psx[f_sel])
+
+    if RATIO_TO_ALL_HZ:
+        pow = pow / sum(self.psx)
 
     return pow
 
