@@ -29,12 +29,12 @@ class SubmoveData2Feat:
         return value
     
     def run_sm_duration_mean(self):
-        value = np.mean(self.sm_durations)
+        value = np.nanmean(self.sm_durations)
         if np.isnan(value): value = 0
         return value
     
     def run_sm_duration_std(self):
-        value = np.std(self.sm_durations)
+        value = np.nanstd(self.sm_durations)
         if np.isnan(value): value = 0
         return value
     
