@@ -3,15 +3,11 @@ Process different data modalities before analysis
 """
 # custom
 from utils.load_data import get_ids
-from utils.load_utils import get_onedrive_path
 
 # public
-from os.path import dirname, join
-import json
 import pandas as pd
 import numpy as np
 from itertools import product
-from mne.filter import filter_data
 
 
 
