@@ -19,14 +19,14 @@ from dbs_home.preprocessing.preparing_ema import (
     ema_directionality_converter
 )
 
-try:
-    from PerceiveImport.classes import main_class
-except:
-    # if PyPerceive import does not work
-    from utils.load_utils import add_PyPerceive_repo
-    # first add repo directory and try again
-    add_PyPerceive_repo()
-    from PerceiveImport.classes import main_class
+# # try:
+# from  import main_class
+# # except:
+#     # if PyPerceive import does not work
+#     from utils.load_utils import add_PyPerceive_repo
+#     # first add repo directory and try again
+#     add_PyPerceive_repo()
+#     from PerceiveImport.classes import main_class
 
 
 

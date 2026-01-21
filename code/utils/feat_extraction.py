@@ -10,6 +10,7 @@ from itertools import compress
 # current repo imports
 from utils import acc_features as acc_fts
 from utils import data_handling_ema_acc as data_handling
+from utils.data_handling_ema_acc import windowData
 
 # dbs_home imports
 from dbs_home.utils import finding_paths
@@ -123,9 +124,13 @@ def get_features_per_session(
         # define current day
         print(f"\n\n##### START day: {str_day}")
         # get dict for current day, needed in both methods of ft extraction (sm or not sm)
-        day_dict_lists = acc_prep.get_day_EMA_AccWindows(
-            subSesClass=home_dat, str_day=str_day,
-        )
+        try:
+            day_dict_lists = acc_prep.get_day_EMA_AccWindows(
+                subSesClass=home_dat, str_day=str_day,
+            )
+        except ValueError:
+            print(f'DAY {str_day} failed: skipped')
+            continue
         
         if not EXTRACT_FT_FROM_SMs:
             # no action required for EXTRACT_FT_FULL_WIN
@@ -145,10 +150,13 @@ def get_features_per_session(
                 ONLY_TIMES=False,
                 SUBMOVE_version=SUBMOVE_version,
             )
+            if sm_day_data == None or type(sm_day_data) == type(None):
+                print(f'DAY {str_day} has "None" as sm_day_data: skipped')
+                continue
             # select submoves on durations
-            sm_day_data = [s for s in sm_day_data
-                        if np.logical_and(s.duration > SM_MIN_DUR,
-                                            s.duration < SM_MAX_DUR)]
+            sm_day_data = [s for s in sm_day_data if np.logical_and(
+                s.duration > SM_MIN_DUR, s.duration < SM_MAX_DUR
+            )]
             # get sm times for selection within window
             (sm_day_starts,
              sm_day_ends) = data_handling.get_submove_day_timestamps(
@@ -181,7 +189,7 @@ def get_features_per_session(
                 continue
         
             # get window data
-            windat = data_handling.windowData(
+            windat = windowData(
                 sub=sub_id,
                 ses=ses_id,
                 day=str_day,
