@@ -50,7 +50,7 @@ def scatter_preds(
     pearson_r = pearsonr(y_pred_total.reshape(-1, 1), y.reshape(-1, 1))
 
     ax.set_title(
-        f'Overall performance:\npearson-R: {round(pearson_r[0][0], 1)}, '
+        f'Overall performance:\npearson-R: {round(pearson_r[0][0], 2)}, '
         f'F-stat: {round(f_regr_skl[0][0], 1)}, p = {round(pearson_r[1][0], 5)}',
         size=FS,
     )

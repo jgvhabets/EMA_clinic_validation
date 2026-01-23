@@ -6,6 +6,7 @@ from scipy.stats import variation
 import os
 from pandas import read_csv, DataFrame
 from itertools import compress
+import json
 
 # current repo imports
 from utils import acc_features as acc_fts
@@ -20,6 +21,42 @@ import dbs_home.preprocessing.submovement_processing as submove_proc
 import dbs_home.load_raw.load_watch_raw as load_watch
 
 
+### FEATURE EXTRACTION PARAMETERS
+# TODO: convert to parameter-JSON (feat_extraction_params_v1.json)
+
+# ft extraction params
+# FEATS_INCL = [
+#     'rms_acc', 'svm_coefvar', 'svm_sd', 'iqr_acc',
+#     'lowpass_rms', 'jerk_magn', 'pow_4_7_ratio',
+#     'pow_8_12_ratio', 'pow_4_12', 'pow_1_3',
+#     'hr_mean', 'hr_std', 'hr_coefvar',
+#     'sm_count', 'sm_duration_mean',
+#     'sm_duration_std', 'sm_duration_coefvar'
+# ]
+# # EMA set variables
+# EMA_CODING = {
+#     'tremor': 'Q7',
+#     'LID': 'Q8',
+#     'overall_move': 'Q6',
+#     'move_hands': 'Q10',
+#     'wellbeing': 'Q1'
+# }
+
+
+def get_feat_params(version='v1'):
+
+    # get current folder
+    dir = os.path.dirname(os.path.abspath(__file__))
+    # load json that is in current folder
+    with open(os.path.join(dir, f'feat_extraction_params_{version}.json')) as f:
+        params = json.load(f)
+
+    FEATS_INCL = params['FEATS_INCL']
+    EMA_CODING = params['EMA_CODING']
+
+    return FEATS_INCL, EMA_CODING
+
+
 
 def get_features_per_session(
     sub_id,
@@ -27,7 +64,8 @@ def get_features_per_session(
     home_dat,
     SUBMOVE_version = 'v3',
     ACC_SFREQ = 32,
-    ACC_MIN_PER_EMA = 15,
+    ONLY_EMA_WINDOWS: bool = True,
+    ACC_MIN_PER_WIN = 15,
     SM_MIN_DUR = .5,  # sec
     SM_MAX_DUR = 600,  # sec
     MIN_ACC_PRESENT = 0.5,
@@ -40,31 +78,22 @@ def get_features_per_session(
     SHOW_PLOT = False,
 ):
     """
+
+    ONLY_EMA_WINDOWS: if True, only windows related to EMA questionaires
+        are extracted, if False: windows for full day are extracted
     """
-    ### ft extraction params
-    FEATS_INCL = [
-        'rms_acc', 'svm_coefvar', 'svm_sd', 'iqr_acc',
-        'lowpass_rms', 'jerk_magn', 'pow_4_7_ratio',
-        'pow_8_12_ratio', 'pow_4_12', 'pow_1_3',
-        'hr_mean', 'hr_std', 'hr_coefvar',
-        'sm_count', 'sm_duration_mean',
-        'sm_duration_std', 'sm_duration_coefvar'
-    ]
-    # EMA set variables
-    EMA_CODING = {
-        'tremor': 'Q7',
-        'LID': 'Q8',
-        'overall_move': 'Q6',
-        'move_hands': 'Q10',
-        'wellbeing': 'Q1'
-    }
+    ### for now: never save submovement-check-plots for whole days
+    if not ONLY_EMA_WINDOWS: SAVE_PLOT = False
+
+    ### load params (features to include and EMA coding)
+    FEATS_INCL, EMA_CODING = get_feat_params()
 
     # input checks
     assert not (EXTRACT_FT_FULL_WIN and EXTRACT_FT_FROM_SMs), (
         'CHOSE ONE OF TWO APROACHES, data OR times from submoves'
     )
 
-    WIN_SAMPLES = (ACC_MIN_PER_EMA * 60 * ACC_SFREQ)
+    WIN_SAMPLES = (ACC_MIN_PER_WIN * 60 * ACC_SFREQ)
 
     # define storing paths
     FIGDIR = os.path.join(
@@ -75,10 +104,17 @@ def get_features_per_session(
     if not os.path.exists(FIGDIR): os.makedirs(FIGDIR)
 
     # TODO: at time of finalizing features, store exact feature extr settings
-    FEATDIR = os.path.join(
-        finding_paths.get_home_onedrive('data'),
-        'features', 'ema_windows', sub_id
-    )
+    if ONLY_EMA_WINDOWS:
+        FEATDIR = os.path.join(
+            finding_paths.get_home_onedrive('data'),
+            'features', 'ema_windows', sub_id
+        )
+    else:
+        FEATDIR = os.path.join(
+            finding_paths.get_home_onedrive('data'),
+            'features', 'all_windows', sub_id
+        )
+
     if not os.path.exists(FEATDIR): os.makedirs(FEATDIR)
     if EXTRACT_FT_FROM_SMs and ACC_FEATS_on_SINGLE_MOVES:
         fname_core = f'feats_singleSubmoves{SUBMOVE_version}'
@@ -92,11 +128,22 @@ def get_features_per_session(
 
 
     ### LOAD FEATS if possible
-    if LOAD_SAVE_FEATS:
+    if LOAD_SAVE_FEATS and ONLY_EMA_WINDOWS:
         if feat_filename in os.listdir(FEATDIR):
             PRED_DF = read_csv(os.path.join(FEATDIR, feat_filename),
                                 index_col=0,)
-
+            return PRED_DF
+        
+    elif LOAD_SAVE_FEATS:
+        # check per day for ALL WINDOWS, and return as dict
+        avail_files = [f for f in os.listdir(FEATDIR) if feat_filename.split('.')[0] in f]
+        if len(avail_files) == 0:
+            print(f'no matching files in {FEATDIR}, features will be created')
+        else:
+            PRED_DF = {}
+            for f in avail_files:
+                day_code = f.split('.')[0][-8:]
+                PRED_DF[day_code] = read_csv(os.path.join(FEATDIR, f), index_col=0,)
             return PRED_DF
     
 
@@ -117,17 +164,30 @@ def get_features_per_session(
         all_windows = []
         FEAT_STORE = None
 
-    Y_STORE = {k: [] for k in list(EMA_CODING.keys())}
+    if ONLY_EMA_WINDOWS: Y_STORE = {k: [] for k in list(EMA_CODING.keys())}
     TIME_STORE = []
 
     for i_day, str_day in enumerate(home_dat.watch_days):
         # define current day
-        print(f"\n\n##### START day: {str_day}")
+        print(f"\n\n##### START feature extraction for day: {str_day}")
         # get dict for current day, needed in both methods of ft extraction (sm or not sm)
         try:
-            day_dict_lists = acc_prep.get_day_EMA_AccWindows(
-                subSesClass=home_dat, str_day=str_day,
-            )
+            if ONLY_EMA_WINDOWS:
+                day_dict_lists = acc_prep.get_day_EMA_AccWindows(
+                    subSesClass=home_dat, str_day=str_day,
+                )
+            else:
+                day_dict_lists = acc_prep.get_day_ALL_AccWindows(
+                    subSesClass=home_dat, str_day=str_day,
+                    START_HOUR=8, END_HOUR=22,
+                )
+                # reset FEAT_STORE since features are stored per day
+                for ft_key in list(FEAT_STORE.keys()):
+                    FEAT_STORE[ft_key] = []
+                TIME_STORE = []
+
+            n_daywindows_found = len(day_dict_lists['acc_times'])
+
         except ValueError:
             print(f'DAY {str_day} failed: skipped')
             continue
@@ -171,9 +231,9 @@ def get_features_per_session(
         )
 
 
-        for i_win in np.arange(len(list(day_dict_lists.values())[0])):
+        for i_win in np.arange(n_daywindows_found):
 
-            print(f"\n\n\n######## START day-win # {i_win} / {len(list(day_dict_lists.values())[0])}")
+            print(f"\n\n\n######## START day-win # {i_win} / {n_daywindows_found}")
 
             # create class with processed acc-data and with ema-dict per completed ema
             
@@ -184,11 +244,14 @@ def get_features_per_session(
                 continue
 
             # check for missing EMA data, and skip emas with missings
-            if any(day_dict_lists['ema'][i_win].values == ''):
+            if ONLY_EMA_WINDOWS and any(day_dict_lists['ema'][i_win].values == ''):
                 print('skip WIN, missing EMA')
                 continue
         
             # get window data
+            if ONLY_EMA_WINDOWS: ema_win_dict = day_dict_lists['ema'][i_win]
+            else: ema_win_dict = {}
+
             windat = windowData(
                 sub=sub_id,
                 ses=ses_id,
@@ -196,7 +259,7 @@ def get_features_per_session(
                 acc_times=day_dict_lists['acc_times'][i_win],
                 acc_triax=day_dict_lists['acc_filt'][i_win],
                 acc_svm=day_dict_lists['acc_svm'][i_win],
-                ema=day_dict_lists['ema'][i_win],
+                ema=ema_win_dict,
             )
 
             # select heartrate for current window
@@ -210,7 +273,7 @@ def get_features_per_session(
             TIME_STORE.append(t1)
 
             # get ema window
-            ema_win = day_dict_lists['ema'][i_win]
+            # ema_win = day_dict_lists['ema'][i_win]
 
             # store window data for later ft-extraction
             if not EXTRACT_FT_FROM_SMs:
@@ -252,7 +315,7 @@ def get_features_per_session(
                 
                 # get mask for submove-pos samples in window
                 (win_submove_bool,
-                submoves_in_win_bool) = data_handling.get_window_submoveMask(
+                 submoves_in_win_bool) = data_handling.get_window_submoveMask(
                     windat.acc_times, sm_day_starts, sm_day_ends,
                 )       
 
@@ -269,7 +332,7 @@ def get_features_per_session(
                         FIGDIR=FIGDIR, FIGNAME=FIGNAME, SAVE_PLOT=SAVE_PLOT,
                         SHOW_PLOT=SHOW_PLOT, SUBMOVE_version=SUBMOVE_version,
                         windat=windat, win_submove_bool=win_submove_bool,
-                        ema_win=ema_win, str_day=str_day,i_win=i_win, hr_win=hr_win,
+                        ema_win=ema_win_dict, str_day=str_day,i_win=i_win, hr_win=hr_win,
                     )
 
                 # EXTRACT FEATURES HERE FROM SUBMOVE data
@@ -314,12 +377,29 @@ def get_features_per_session(
 
                 # TODO: try for cnn -> interpolate single sm-features into 
                 # n=100 (zB) mask, 0-padding for n-sm <100 windows
-            
+
             ### extract EMA values per window
-            for EMA_ITEM in list(Y_STORE.keys()):
-                Y_STORE[EMA_ITEM].append(float(ema_win[EMA_CODING[EMA_ITEM]]))
+            if ONLY_EMA_WINDOWS:
+                for EMA_ITEM in list(Y_STORE.keys()):
+                    Y_STORE[EMA_ITEM].append(float(ema_win_dict[EMA_CODING[EMA_ITEM]]))
+
+            ### end of window loop
+
+        ### end of day loop
+        if not ONLY_EMA_WINDOWS:
+            # save features per day
+            if LOAD_SAVE_FEATS:
+                # get one df with all info
+                PRED_DF = DataFrame(TIME_STORE, columns=['timestamp'])
+                for k, v in FEAT_STORE.items():
+                    PRED_DF[k] = v
+                daycode = str_day.replace('-', '')  # without dashes
+                dayfile = feat_filename.replace('.csv', f'_{daycode}.csv')
+                PRED_DF.to_csv(os.path.join(FEATDIR, dayfile))
                 
-    if LOAD_SAVE_FEATS:
+
+    # save only ema windows at end
+    if LOAD_SAVE_FEATS and ONLY_EMA_WINDOWS:
         # get one df with all info
         PRED_DF = DataFrame(TIME_STORE, columns=['timestamp'])
         for k, v in FEAT_STORE.items():

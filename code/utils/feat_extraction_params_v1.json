@@ -1,0 +1,27 @@
+{
+    "FEATS_INCL": [
+        "rms_acc",
+        "svm_coefvar",
+        "svm_sd",
+        "iqr_acc",
+        "lowpass_rms",
+        "jerk_magn",
+        "pow_4_7_ratio",
+        "pow_8_12_ratio",
+        "pow_4_12",
+        "pow_1_3",
+        "hr_mean","hr_std",
+        "hr_coefvar",
+        "sm_count",
+        "sm_duration_mean",
+        "sm_duration_std",
+        "sm_duration_coefvar"
+    ],
+    "EMA_CODING": {
+        "tremor": "Q7",
+        "LID": "Q8",
+        "overall_move": "Q6",
+        "move_hands": "Q10",
+        "wellbeing": "Q1"
+    }
+}

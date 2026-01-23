@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, LeaveOneGroupOut
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
@@ -12,10 +12,11 @@ from scipy.stats import pearsonr
 
 
 def classif_home_ema(
-    X, y,
+    X, y, day_codes=None,
     PERMS=False, N_PERMS=0,
     CLS_METHOD = 'lasso',
     n_fold_cv = 4,
+    leave_day_out_cv=False,
     ZSCORE_Y=False,
     verbose=False,
 ):
@@ -27,9 +28,15 @@ def classif_home_ema(
         'lasso': Lasso(alpha=0.3)
     }
     # StratifiedKFold not possible due to continuous values after zscoring
-    skf = KFold(n_splits=n_fold_cv, random_state=27, shuffle=True,)
-    skf.get_n_splits()
+    if not leave_day_out_cv:
+        cvMethod = KFold(n_splits=n_fold_cv, random_state=27, shuffle=True,)
+        cvMethod.get_n_splits()
+        fold_params = {'X': X, 'y': y}
 
+    else:
+        cvMethod = LeaveOneGroupOut()
+        cvMethod.get_n_splits(groups=day_codes)
+        fold_params = {'X': X, 'y': y, 'groups': day_codes}
 
     y_pred_total = np.zeros_like(y).ravel()
 
@@ -47,7 +54,8 @@ def classif_home_ema(
     for i_iter in np.arange(n_iters):
         if verbose: print(f'iteration {i_iter}')
 
-        for i_fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+        for i_fold, (train_idx, test_idx) in enumerate(cvMethod.split(**fold_params)):
+            # print(f'fold # {i_fold}, test size: {len(test_idx)}')
 
             clf = CLS_LIB[CLS_METHOD]
 
@@ -63,7 +71,7 @@ def classif_home_ema(
             if CLS_METHOD == 'linreg': y_pred = y_pred.ravel()
             y_pred_total[test_idx] = y_pred
 
-            if not PERMS:
+            if not PERMS and not leave_day_out_cv:
                 f_regr_skl = f_regression(y_pred.reshape(-1, 1), y_true.reshape(-1, 1))
                 pearson_r = pearsonr(y_pred.reshape(-1, 1), y_true.reshape(-1, 1))
                 
@@ -101,8 +109,9 @@ def classif_home_ema(
             print(f'TOTALLL CV')
             print(f'\tF-stat (skl): {round(f_regr_skl[0][0], 1)}, '
                     f'p = {round(f_regr_skl[1][0], 5)}')
-            print(f'\tPearson-R (skl): {round(pearson_r[0][0], 1)}, '
+            print(f'\tPearson-R (skl): {round(pearson_r[0][0], 2)}, '
                     f'p = {round(pearson_r[1][0], 5)}\n\n')
+            # print(f'full pearson-R: {pearson_r}')
 
 
     if not PERMS: return y_pred_total
