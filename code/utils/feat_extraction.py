@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.stats import variation
 import os
-from pandas import read_csv, DataFrame
+from pandas import read_csv, DataFrame, isna, concat
 from itertools import compress
 import json
 
@@ -19,6 +19,7 @@ from dbs_home.preprocessing import acc_preprocessing as acc_prep
 from dbs_home.preprocessing import get_submovements
 import dbs_home.preprocessing.submovement_processing as submove_proc
 import dbs_home.load_raw.load_watch_raw as load_watch
+from dbs_home.load_raw.main_load_raw import loadSubject 
 
 
 ### FEATURE EXTRACTION PARAMETERS
@@ -61,7 +62,7 @@ def get_feat_params(version='v1'):
 def get_features_per_session(
     sub_id,
     ses_id,
-    home_dat,
+    home_dat=None,
     SUBMOVE_version = 'v3',
     ACC_SFREQ = 32,
     ONLY_EMA_WINDOWS: bool = True,
@@ -78,9 +79,12 @@ def get_features_per_session(
     SHOW_PLOT = False,
 ):
     """
-
     ONLY_EMA_WINDOWS: if True, only windows related to EMA questionaires
         are extracted, if False: windows for full day are extracted
+    if ONLY_EMA: returns a df for whole sessions
+    if not ONLY_EMA: returns a dict with df's per day
+    TODO: first time creation and storing of submovements if not present
+    --> workflow not perfect yet
     """
     ### for now: never save submovement-check-plots for whole days
     if not ONLY_EMA_WINDOWS: SAVE_PLOT = False
@@ -146,6 +150,21 @@ def get_features_per_session(
                 PRED_DF[day_code] = read_csv(os.path.join(FEATDIR, f), index_col=0,)
             return PRED_DF
     
+
+    ### FT LOADING NOT POSSIBLE; FT EXTRACTING STARTS
+
+    # ensure that home_dat is given, if not --> load
+    if not home_dat:
+        home_dat = loadSubject(
+            sub=sub_id,
+            ses=ses_id,
+            incl_STEPS=False,
+            incl_EPHYS=False,
+            incl_EMA=True,
+            incl_ACC=True,
+            day_selection=[]
+        )
+
 
     # if features are not directly extraced, list to store data
     if EXTRACT_FT_FROM_SMs:
@@ -409,6 +428,89 @@ def get_features_per_session(
         PRED_DF.to_csv(os.path.join(FEATDIR, feat_filename))
 
 
+
+def remove_noSubmove_rows(ft_full_ses):
+    # select out windows without submoves
+    NOMOVE_CRIT_1 = isna(ft_full_ses['rms_acc_SMcfvar'])
+    NOMOVE_CRIT_2 = ft_full_ses['rms_acc_SMmean'] == 0.0
+    # print('nans:', sum(NOMOVE_CRIT_1), sum(NOMOVE_CRIT_2), len(NOMOVE_CRIT_2))
+
+    nomove_idx = np.where(np.logical_and(NOMOVE_CRIT_1, NOMOVE_CRIT_2))[0]
+    move_idx = np.where(~np.logical_and(NOMOVE_CRIT_1, NOMOVE_CRIT_2))[0]
+    nomove_times = ft_full_ses.index[nomove_idx]
+    
+    # only keep rows with submovements
+    ft_full_ses = ft_full_ses.iloc[move_idx]
+
+    return ft_full_ses
+
+
+def get_feat_df_for_pred(
+    sub_id, ses_id, ft_set_sel,
+    ONLY_EMA_WINDOWS=True,
+    verbose=False,
+):
+
+
+    iter_settings = {
+        'nosm_allwindow': {
+            "EXTRACT_FT_FROM_SMs": False,
+            "EXTRACT_FT_FULL_WIN": True,
+            "ACC_FEATS_on_SINGLE_MOVES": False
+        },
+        'sm_merged': {
+            "EXTRACT_FT_FROM_SMs": True,
+            "EXTRACT_FT_FULL_WIN": False,
+            "ACC_FEATS_on_SINGLE_MOVES": False
+        },
+        'sm_single': {
+            "EXTRACT_FT_FROM_SMs": True,
+            "EXTRACT_FT_FULL_WIN": False,
+            "ACC_FEATS_on_SINGLE_MOVES": True
+        }
+    }
+
+    assert ft_set_sel in iter_settings.keys(), 'incorrect ft_set_sel given'
+
+
+    temp_fts = get_features_per_session(
+        ONLY_EMA_WINDOWS=ONLY_EMA_WINDOWS,
+        sub_id=sub_id,
+        ses_id=ses_id,
+        LOAD_SAVE_FEATS = True,
+        # define how features should be extracted
+        STORE_SUBMOVES = False,
+        # plotting settings
+        SAVE_PLOT = False,
+        SHOW_PLOT = False,
+        **iter_settings[ft_set_sel],
+    )
+
+    if ONLY_EMA_WINDOWS:
+        # whole sessions is alrady within the resulted df
+        ft_full_ses = temp_fts
+    
+    else:
+        # merge into one df
+        ft_full_ses = DataFrame()
+
+        for d, f in temp_fts.items():
+            ft_full_ses = concat([ft_full_ses, f]).reset_index(drop=True)
+
+        ft_full_ses = ft_full_ses.set_index(keys="timestamp")
+        
+    ### identify and remove rows without submovements for submovement ft sets
+    if ft_set_sel.startswith('sm'):
+        ft_full_ses = remove_noSubmove_rows(ft_full_ses)
+
+    # check missings
+    if verbose:
+        print(
+            'MISSINGS:',
+            np.sum(isna(ft_full_ses), axis=0), ft_full_ses.shape
+        )
+
+    return ft_full_ses
 
 
 

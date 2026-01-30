@@ -4,9 +4,10 @@ import numpy as np
 import datetime as dt
 import matplotlib.pyplot as plt
 import os
+from pandas import read_excel, isna
 
 from dbs_home.preprocessing import get_submovements
-
+from dbs_home.utils.finding_paths import get_home_onedrive
 
 @dataclass(init=True,)
 class windowData:
@@ -132,3 +133,142 @@ def plot_submove_check(
 
     if SHOW_PLOT: plt.show()
     else: plt.close()
+
+
+
+def get_med_scheme(sub, ses):
+
+    # get med-scheme
+    f_path = os.path.join(get_home_onedrive('raw_data'),
+                        sub, f'med_schemes_{sub}.xlsx')
+
+    med_scheme = read_excel(f_path, sheet_name=ses, index_col='intake_time')
+
+    return med_scheme
+
+
+def get_intervals_to_ldopa(timestamps, sub, ses):
+    """
+    returned as minutes, positive if time was after ldopa intake,
+    negative if time was prior to ldopa intake
+    """
+
+    med_scheme = get_med_scheme(sub, ses)
+    # select l-dopa
+    ldopa_scheme = med_scheme['levodopa'][~isna(med_scheme['levodopa'])]
+    ldopa_times = ldopa_scheme.index.values
+    ldopa_clocktimes = [dt.datetime.strptime(f'{t.hour}:{t.minute}', '%H:%M')
+                        for t in ldopa_times]
+    # print(ldopa_clocktimes)
+    sample_clocktimes = [dt.datetime.strptime(f'{t.hour}:{t.minute}', '%H:%M')
+                         for t in timestamps]
+
+    # calculate differences in clock time
+    intervals = []
+
+    for i_t, t in enumerate(sample_clocktimes):  # i for debugging
+        # print('\n', t, timestamps[i_t])
+        i_closest_dopa = np.argmin(np.abs(t - np.array(ldopa_clocktimes)))
+        closest_dopa_time = ldopa_clocktimes[i_closest_dopa]
+        dopa_distance = t - closest_dopa_time
+        # print(dopa_distance)
+        intervals.append(dopa_distance)  # is positive if time is after closest intake, neg if t is pre-intake
+
+    # convert timedeltas into minutes
+    interval_minutes = []
+    for t in intervals:
+        if t.days == 0:
+            interval_minutes.append(t.seconds / 60)
+        elif t.days == -1:
+            interval_minutes.append(t.seconds/60 - (24*60) )
+
+    return interval_minutes
+
+
+
+def sort_values_into_ldopa_distances(values, dopa_distances,):
+
+    dist_borders = np.arange(-90, 91, step=15,)
+
+    border_groups = [[] for b in dist_borders]
+
+    for t_dist, t_val in zip(dopa_distances, values):
+
+        if t_dist <= dist_borders[0]:
+            border_groups[0].append(t_val)
+        elif t_dist >= dist_borders[-1]:
+            border_groups[-1].append(t_val)
+        else:
+            i_group = np.argmin(np.abs(dist_borders - t_dist))
+            border_groups[i_group].append(t_val)
+            # print(f'{t_dist} added to {dist_borders[i_group]}')
+    
+    return border_groups, dist_borders
+
+
+def get_dayminutes(t):
+
+    if type(t) == str:
+        t = dt.datetime.strptime(t[:16], "%Y-%m-%d %H:%M")
+
+    minutes = t.minute
+    minutes += (t.hour * 60)
+
+    return minutes
+
+
+def get_daily_minutes_mask(HR_START=8, HR_END=22, WIN_LEN_minutes=15):
+
+    # get day time raster (in minutes into day)
+    t0 = dt.datetime.strptime(str(HR_START), "%H")
+    n_wins = (HR_END - HR_START) * (60 / WIN_LEN_minutes)
+    mask_dtimes = [t0 + dt.timedelta(minutes=int(WIN_LEN_minutes * i))
+                   for i in np.arange(n_wins)]
+    mask_minutes = [get_dayminutes(t) for t in mask_dtimes]
+
+    return mask_minutes
+
+
+def get_ft_daily_mean(
+    ft_values, ft_times,
+    PLOT_SAMPLE_DISTRIBUTION=False,
+):
+    
+    mask_minutes = get_daily_minutes_mask()
+    mask_dict = {m: [] for m in mask_minutes}
+
+    for i, v in enumerate(ft_values):
+        # get daily minute of timestamp (df-index)
+        t = get_dayminutes(ft_times[i])
+        # add ft value to list of corresponding daily minute
+        try:
+            mask_dict[t].append(v)
+        except KeyError:
+            # daily minutes not correct, find closest
+            i_alt = np.argmin(abs(np.array(mask_minutes) - t))
+            min_alt = mask_minutes[i_alt]
+            mask_dict[min_alt].append(v)
+    
+    daily_minutes = list(mask_dict.keys())
+    daily_mean = np.array([np.nanmean(l) for l in mask_dict.values()])
+    daily_std = np.array([np.nanstd(l) for l in mask_dict.values()])
+
+    ### plot distribution of samples on daily-minutes-raster
+    if PLOT_SAMPLE_DISTRIBUTION:
+        for k, v in mask_dict.items():
+            print(f'{k} min, {k / 60} h: {len(v)} samples')
+
+        samples_at_minutes = [len(l) for l in mask_dict.values()]
+        print(samples_at_minutes)
+        fig,ax = plt.subplots(1,1, figsize=(8, 3))
+        ax.bar(x=daily_minutes, height=samples_at_minutes,
+               width=12, color='olivedrab', alpha=.3,)
+        # ax.plot(daily_minutes, [len(l) for l in mask_dict.values()])
+        ax.set_ylabel('n samples (count)')
+        ax.set_xlabel('Time at Day (hours)')
+        ax.set_xticks(daily_minutes[::8])
+        ax.set_xticklabels((np.array(daily_minutes[::8])/60).astype(int),)
+
+        plt.show()
+
+    return daily_minutes, daily_mean, daily_std

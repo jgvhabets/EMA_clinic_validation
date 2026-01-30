@@ -8,6 +8,42 @@ from scipy.stats import pearsonr
 
 from utils.load_utils import get_onedrive_path
 
+
+def plot_daily_ft_mean(
+    daily_minutes, daily_mean, daily_std, ft_name,
+    use_ax = None, FS=12, plot_color = 'olivedrab',
+):
+
+    
+    xtick_hop = 8
+
+    if not use_ax:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 3))
+        RETURN_AX = False
+    else:
+        ax = use_ax
+        RETURN_AX = True
+
+    ax.plot(daily_minutes, daily_mean, color=plot_color, lw=3,)
+    ax.fill_between(daily_minutes, y1=daily_mean - daily_std,
+                    y2=daily_mean + daily_std, alpha=.3,
+                    color=plot_color,)
+
+    ax.set_xticks(daily_minutes[::xtick_hop])
+    ax.set_xticklabels((np.array(daily_minutes[::xtick_hop])/60).astype(int),
+                    fontsize=FS,)
+
+    if not use_ax:
+        ax.set_xlabel('Time at Day (hours)', fontsize=FS,)
+
+        ax.set_ylabel(ft_name, fontsize=FS,)
+
+    if RETURN_AX:
+        return ax
+    else:
+        plt.show()
+
+
 def scatter_preds(
     y, y_pred_total,
     ZSCORE_Y=False,
