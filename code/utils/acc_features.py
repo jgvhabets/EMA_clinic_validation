@@ -3,7 +3,7 @@
 """
 
 import numpy as np
-from scipy.stats import variation, pearsonr
+from scipy.stats import variation, pearsonr, kurtosis as scipy_kurtosis, skew as scipy_skew
 from scipy.signal import find_peaks, welch, butter, filtfilt
 from sklearn.decomposition import PCA
 
@@ -647,3 +647,199 @@ def get_peak_pow_dom_freq_above_3_ratio_total(self, include_low=False):
     ratio = peak_pow_above_3 / total_pow
 
     return ratio
+
+
+# ---------------------------------------------------------------------------
+# Feature 2 – Mean Absolute Value per axis
+# ---------------------------------------------------------------------------
+
+def get_mav_per_axis(self):
+    """Mean absolute value of each accelerometer axis (x, y, z)."""
+    triax = np.asarray(self.acc_triax, dtype=float)
+    mav = np.mean(np.abs(triax), axis=0)
+    return float(mav[0]), float(mav[1]), float(mav[2])
+
+
+# ---------------------------------------------------------------------------
+# Feature 3 – Peak Acceleration (SVM)
+# ---------------------------------------------------------------------------
+
+def get_peak_acc(self):
+    """Maximum instantaneous SVM value in the window."""
+    x = np.asarray(self.acc_svm, dtype=float)
+    return float(np.max(x))
+
+
+# ---------------------------------------------------------------------------
+# Feature 4 – Jerk RMS (SVM derivative)
+# ---------------------------------------------------------------------------
+
+def get_jerk_rms(self):
+    """RMS of the first-order time derivative of SVM."""
+    x = np.asarray(self.acc_svm, dtype=float)
+    jerk = np.gradient(x)
+    return float(np.sqrt(np.mean(jerk ** 2)))
+
+
+# ---------------------------------------------------------------------------
+# Feature 5 – Zero-Crossing Rate per axis
+# ---------------------------------------------------------------------------
+
+def get_zero_crossing_rate(self):
+    """Zero-crossings per second for each axis (x, y, z)."""
+    triax = np.asarray(self.acc_triax, dtype=float)
+    n = triax.shape[0]
+    duration_s = n / self.sfreq
+    zcr = []
+    for i in range(3):
+        col = triax[:, i]
+        crossings = int(np.sum(np.diff(np.sign(col)) != 0))
+        zcr.append(crossings / duration_s)
+    return tuple(zcr)  # (zcr_x, zcr_y, zcr_z)
+
+
+# ---------------------------------------------------------------------------
+# Feature 6 – Approximate Entropy (ApEn)
+# ---------------------------------------------------------------------------
+
+def _approx_entropy(x, m=2, r=None):
+    """Compute Approximate Entropy of time series x."""
+    x = np.asarray(x, dtype=float)
+    N = len(x)
+    if r is None:
+        r = 0.2 * np.std(x)
+    if N < m + 2 or r <= 0:
+        return np.nan
+
+    def _phi(m_val):
+        templates = np.array([x[i:i + m_val] for i in range(N - m_val + 1)])
+        count = np.sum(
+            np.max(np.abs(templates[:, None] - templates[None, :]), axis=2) <= r,
+            axis=1,
+        )
+        return np.mean(np.log(count / (N - m_val + 1)))
+
+    return float(_phi(m) - _phi(m + 1))
+
+
+def get_approx_entropy(self, m=2):
+    """Approximate Entropy (ApEn) of the SVM signal."""
+    x = np.asarray(self.acc_svm, dtype=float)
+    return _approx_entropy(x, m=m)
+
+
+# ---------------------------------------------------------------------------
+# Feature 7 – Autocorrelation Lag-1 (SVM)
+# ---------------------------------------------------------------------------
+
+def get_autocorr_lag1(self):
+    """Normalized lag-1 autocorrelation of the SVM signal."""
+    x = np.asarray(self.acc_svm, dtype=float)
+    x0 = x - np.mean(x)
+    denom = float(np.sum(x0 ** 2))
+    if denom <= 0:
+        return np.nan
+    return float(np.sum(x0[:-1] * x0[1:]) / denom)
+
+
+# ---------------------------------------------------------------------------
+# Feature 10 – Spectral Entropy (SVM)
+# ---------------------------------------------------------------------------
+
+def get_spectral_entropy(self):
+    """Shannon entropy of the normalized power spectrum."""
+    psx = np.asarray(self.psx, dtype=float)
+    total = float(np.sum(psx))
+    if total <= 0:
+        return np.nan
+    p = psx / total
+    p = p[p > 0]
+    return float(-np.sum(p * np.log(p)))
+
+
+# ---------------------------------------------------------------------------
+# Feature 11 – Spectral Edge Frequency (95th percentile, SVM)
+# ---------------------------------------------------------------------------
+
+def get_spectral_edge_freq(self, percentile=95):
+    """Frequency below which `percentile`% of spectral power lies."""
+    fx = np.asarray(self.fx, dtype=float)
+    psx = np.asarray(self.psx, dtype=float)
+    cumulative = np.cumsum(psx)
+    total = cumulative[-1]
+    if total <= 0:
+        return np.nan
+    threshold = (percentile / 100.0) * total
+    idx = int(np.searchsorted(cumulative, threshold))
+    idx = min(idx, len(fx) - 1)
+    return float(fx[idx])
+
+
+# ---------------------------------------------------------------------------
+# Feature 12 – Kurtosis (SVM)
+# ---------------------------------------------------------------------------
+
+def get_kurtosis(self):
+    """Excess kurtosis of the SVM amplitude distribution."""
+    x = np.asarray(self.acc_svm, dtype=float)
+    return float(scipy_kurtosis(x, fisher=True))
+
+
+# ---------------------------------------------------------------------------
+# Feature 13 – Skewness (SVM)
+# ---------------------------------------------------------------------------
+
+def get_skewness(self):
+    """Skewness of the SVM amplitude distribution."""
+    x = np.asarray(self.acc_svm, dtype=float)
+    return float(scipy_skew(x))
+
+
+# ---------------------------------------------------------------------------
+# Feature 14 – Pairwise axis Pearson correlations (x–y, x–z, y–z)
+# ---------------------------------------------------------------------------
+
+def get_axis_correlations(self):
+    """Pearson correlation between each pair of accelerometer axes.
+
+    Returns (corr_xy, corr_xz, corr_yz).
+    """
+    if not hasattr(self, 'acc_triax') or self.acc_triax is None:
+        return np.nan, np.nan, np.nan
+    x = self.acc_triax[:, 0]
+    y = self.acc_triax[:, 1]
+    z = self.acc_triax[:, 2]
+    corr_xy, _ = pearsonr(x, y)
+    corr_xz, _ = pearsonr(x, z)
+    corr_yz, _ = pearsonr(y, z)
+    return float(corr_xy), float(corr_xz), float(corr_yz)
+
+
+# ---------------------------------------------------------------------------
+# Feature 15 – Ratio of SVM Variance to Gravity Component Variance
+# ---------------------------------------------------------------------------
+
+def get_svm_var_to_gravity_var_ratio(self):
+    """Ratio of dynamic (SVM) variance to gravity-projection variance.
+
+    Gravity direction is estimated as the unit vector of the mean
+    triaxial acceleration. The signal is then projected onto that
+    direction; high values indicate active movement relative to posture.
+    """
+    if not hasattr(self, 'acc_triax') or self.acc_triax is None:
+        return np.nan
+    triax = np.asarray(self.acc_triax, dtype=float)
+    svm_var = float(np.var(self.acc_svm))
+
+    g_vec = np.mean(triax, axis=0)
+    g_norm = float(np.linalg.norm(g_vec))
+    if g_norm <= 0:
+        return np.nan
+    g_unit = g_vec / g_norm
+
+    gravity_projection = triax @ g_unit
+    gravity_var = float(np.var(gravity_projection))
+    if gravity_var <= 0:
+        return np.nan
+
+    return svm_var / gravity_var
