@@ -7,7 +7,7 @@
         "iqr_acc": false,
         "lowpass_rms": false,
         "jerk_magn": false,
-        "dom_freq": true,
+        "dom_freq_above_3": true,
         "pow_4_7_ratio": true,
         "pow_8_12_ratio": true,
         "pow_4_12": true,

@@ -3,7 +3,7 @@
 """
 
 import numpy as np
-from scipy.stats import variation, pearsonr, kurtosis as scipy_kurtosis, skew as scipy_skew
+from scipy.stats import variation, kurtosis as scipy_kurtosis, skew as scipy_skew
 from scipy.signal import find_peaks, welch, butter, filtfilt
 from sklearn.decomposition import PCA
 
@@ -148,7 +148,7 @@ def get_corrcoef_components(self):
 
     pca = PCA(n_components=3)
     comps = pca.fit_transform(self.acc_triax)
-    corr_coef, _ = pearsonr(abs(comps[:, 0]), abs(comps[:, 1]))
+    corr_coef = float(np.corrcoef(np.abs(comps[:, 0]), np.abs(comps[:, 1]))[0, 1])
 
     return corr_coef
 
@@ -702,22 +702,38 @@ def get_zero_crossing_rate(self):
 # Feature 6 – Approximate Entropy (ApEn)
 # ---------------------------------------------------------------------------
 
-def _approx_entropy(x, m=2, r=None):
-    """Compute Approximate Entropy of time series x."""
+def _approx_entropy(x, m=2, r=None, max_n=5000):
+    """Compute Approximate Entropy of time series x.
+
+    Uses a KD-tree (Chebyshev metric) to avoid the O(N^2 * m) memory
+    allocation of the naive matrix approach. A subsample stride is applied
+    when N > max_n as a safety cap for very long windows.
+    """
+    from scipy.spatial import cKDTree
+
     x = np.asarray(x, dtype=float)
     N = len(x)
+
+    # Subsample if signal is too long (preserves temporal structure via stride)
+    if N > max_n:
+        step = N // max_n
+        x = x[::step]
+        N = len(x)
+
     if r is None:
         r = 0.2 * np.std(x)
     if N < m + 2 or r <= 0:
         return np.nan
 
     def _phi(m_val):
-        templates = np.array([x[i:i + m_val] for i in range(N - m_val + 1)])
-        count = np.sum(
-            np.max(np.abs(templates[:, None] - templates[None, :]), axis=2) <= r,
-            axis=1,
-        )
-        return np.mean(np.log(count / (N - m_val + 1)))
+        # shape (N - m_val + 1, m_val) — O(N * m) memory
+        templates = np.lib.stride_tricks.sliding_window_view(x, m_val)
+        tree = cKDTree(templates)
+        # Chebyshev norm (p=inf) matches the ApEn definition
+        counts = tree.query_ball_point(templates, r=r, p=np.inf,
+                                       return_length=True)
+        return float(np.mean(np.log(np.asarray(counts, dtype=float)
+                                    / len(templates))))
 
     return float(_phi(m) - _phi(m + 1))
 
@@ -806,13 +822,9 @@ def get_axis_correlations(self):
     """
     if not hasattr(self, 'acc_triax') or self.acc_triax is None:
         return np.nan, np.nan, np.nan
-    x = self.acc_triax[:, 0]
-    y = self.acc_triax[:, 1]
-    z = self.acc_triax[:, 2]
-    corr_xy, _ = pearsonr(x, y)
-    corr_xz, _ = pearsonr(x, z)
-    corr_yz, _ = pearsonr(y, z)
-    return float(corr_xy), float(corr_xz), float(corr_yz)
+    # np.corrcoef avoids scipy pearsonr incompatibility with numpy >= 2.0
+    C = np.corrcoef(np.asarray(self.acc_triax, dtype=float).T)  # shape (3, 3)
+    return float(C[0, 1]), float(C[0, 2]), float(C[1, 2])
 
 
 # ---------------------------------------------------------------------------

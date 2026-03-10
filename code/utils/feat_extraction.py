@@ -9,9 +9,9 @@ from itertools import compress
 import json
 
 # current repo imports
-from utils import acc_features as acc_fts
 from utils import data_handling_ema_acc as data_handling
 from utils.data_handling_ema_acc import windowData
+from utils.ft_extract_class import SubmoveData2Feat
 
 # dbs_home imports
 from dbs_home.utils import finding_paths
@@ -22,8 +22,6 @@ import dbs_home.load_raw.load_watch_raw as load_watch
 from dbs_home.load_raw.main_load_raw import loadSubject 
 
 
-### FEATURE EXTRACTION PARAMETERS
-# TODO: convert to parameter-JSON (feat_extraction_params_v1.json)
 
 # ft extraction params
 # FEATS_INCL = [
@@ -63,6 +61,7 @@ def get_features_per_session(
     sub_id,
     ses_id,
     home_dat=None,
+    FT_PARAMS_VERSION = 'v1',
     SUBMOVE_version = 'v3',
     ACC_SFREQ = 32,
     ONLY_EMA_WINDOWS: bool = True,
@@ -77,6 +76,7 @@ def get_features_per_session(
     STORE_SUBMOVES = False,  # deprecated currently
     SAVE_PLOT = False,
     SHOW_PLOT = False,
+    verbose = False,
 ):
     """
     ONLY_EMA_WINDOWS: if True, only windows related to EMA questionaires
@@ -90,7 +90,8 @@ def get_features_per_session(
     if not ONLY_EMA_WINDOWS: SAVE_PLOT = False
 
     ### load params (features to include and EMA coding)
-    FEATS_INCL, EMA_CODING = get_feat_params()
+    FEATS_INCL, EMA_CODING = get_feat_params(version=FT_PARAMS_VERSION)
+    print(f'feature extraction settings: {FT_PARAMS_VERSION}, features included: {FEATS_INCL}')
 
     # input checks
     assert not (EXTRACT_FT_FULL_WIN and EXTRACT_FT_FROM_SMs), (
@@ -111,15 +112,16 @@ def get_features_per_session(
     if ONLY_EMA_WINDOWS:
         FEATDIR = os.path.join(
             finding_paths.get_home_onedrive('data'),
-            'features', 'ema_windows', sub_id
+            'features', f'ema_windows_ft{FT_PARAMS_VERSION}', sub_id
         )
     else:
         FEATDIR = os.path.join(
             finding_paths.get_home_onedrive('data'),
-            'features', 'all_windows', sub_id
+            'features', f'all_windows_ft{FT_PARAMS_VERSION}', sub_id
         )
 
     if not os.path.exists(FEATDIR): os.makedirs(FEATDIR)
+
     if EXTRACT_FT_FROM_SMs and ACC_FEATS_on_SINGLE_MOVES:
         fname_core = f'feats_singleSubmoves{SUBMOVE_version}'
     elif EXTRACT_FT_FROM_SMs:
@@ -136,6 +138,7 @@ def get_features_per_session(
         if feat_filename in os.listdir(FEATDIR):
             PRED_DF = read_csv(os.path.join(FEATDIR, feat_filename),
                                 index_col=0,)
+            print(f'features loaded from {FEATDIR}, file: {feat_filename}')
             return PRED_DF
         
     elif LOAD_SAVE_FEATS:
@@ -148,6 +151,7 @@ def get_features_per_session(
             for f in avail_files:
                 day_code = f.split('.')[0][-8:]
                 PRED_DF[day_code] = read_csv(os.path.join(FEATDIR, f), index_col=0,)
+                print(f'features loaded from {FEATDIR}, file: {f}')
             return PRED_DF
     
 
@@ -252,7 +256,7 @@ def get_features_per_session(
 
         for i_win in np.arange(n_daywindows_found):
 
-            print(f"\n\n\n######## START day-win # {i_win} / {n_daywindows_found}")
+            print(f"\n\n\n######## START day-win # {i_win + 1} / {n_daywindows_found}")
 
             # create class with processed acc-data and with ema-dict per completed ema
             
@@ -301,11 +305,13 @@ def get_features_per_session(
                     # EXTRACT FEATURES from full acc-window, without submove-selection
                     win_ft_class = SubmoveData2Feat(
                         acc_svm=windat.acc_svm,
+                        acc_triax=windat.acc_triax,
                         hr=hr_win[' HeartRate'].values,
                     )
 
                     # extract all feats that are defined in FEATS_INCL (no submove feats)
                     for ft in list(FEAT_STORE.keys()):
+                        if verbose: print(f'...extracting {ft} from full window data (window # {i_win} / {n_daywindows_found})')
                         value = getattr(win_ft_class, f'run_{ft}')()  # extra brackets () for executing function
                         FEAT_STORE[ft].append(value)
 
@@ -343,6 +349,10 @@ def get_features_per_session(
 
                 # only submoves from day, are within current window
                 sm_win_data = list(compress(sm_day_data, submoves_in_win_bool))
+                if len(sm_win_data) == 0:
+                    SMs_PRESENT = False
+                else:
+                    SMs_PRESENT = True
 
                 # check correctness of submovements by plotting window ACC
                 if SAVE_PLOT or SHOW_PLOT:
@@ -358,13 +368,16 @@ def get_features_per_session(
 
                 # get one array with svm data of all submovements from window            
                 ### SM_MERGE
-                merged_sm_svm = np.array([value for sm in sm_win_data for value in sm.svm])
+                if SMs_PRESENT:
+                    merged_sm_svm = np.array([value for sm in sm_win_data for value in sm.svm])
+                    merged_sm_triax = np.vstack([sm.triax_acc.T for sm in sm_win_data])
 
-                sm_ft_class = SubmoveData2Feat(
-                    acc_svm=merged_sm_svm,
-                    hr=hr_win[' HeartRate'].values,
-                    sm_durations=np.array([s.duration for s in sm_win_data]),
-                )
+                    sm_ft_class = SubmoveData2Feat(
+                        acc_svm=merged_sm_svm,
+                        acc_triax=merged_sm_triax,
+                        hr=hr_win[' HeartRate'].values,
+                        sm_durations=np.array([s.duration for s in sm_win_data]),
+                    )
 
                 # extract all feats that are defined in FEATS_INCL on MERGED SM data
                 for ft in FEATS_INCL:
@@ -374,7 +387,11 @@ def get_features_per_session(
                     ):
                         # do not add single merged acc feats if they be calculated on singlemoves
                         continue
-                    value = getattr(sm_ft_class, f'run_{ft}')()  # extra brackets () for executing function
+                    if verbose: print(f'...extracting {ft} from full window data (window # {i_win} / {n_daywindows_found})')
+                    if SMs_PRESENT:
+                        value = getattr(sm_ft_class, f'run_{ft}')()  # extra brackets () for executing function
+                    else:
+                        value = np.nan  # if no submoves, all sm-feats are nan
                     FEAT_STORE[ft].append(value)
 
                 ### SM SINGLES
@@ -386,13 +403,20 @@ def get_features_per_session(
                             ft_win_list.append(0)
                         else:
                             for sm in sm_win_data:
-                                single_sm_class = SubmoveData2Feat(acc_svm=sm.svm,)
+                                if verbose: print(f'...extracting {ft} from full window data (window # {i_win} / {n_daywindows_found})')
+                                single_sm_class = SubmoveData2Feat(
+                                    acc_svm=sm.svm,
+                                    acc_triax=sm.triax_acc,
+                                )
                                 value = getattr(single_sm_class, f'run_{ft}')()
                                 ft_win_list.append(value)  # add value per submovement
                         # add summarized scores per window
                         FEAT_STORE[f'{ft}_SMmean'].append(np.nanmean(ft_win_list))
-                        FEAT_STORE[f'{ft}_SMcfvar'].append(variation([v for v in ft_win_list if not np.isnan(v)]))
-
+                        try:
+                            FEAT_STORE[f'{ft}_SMcfvar'].append(variation([v for v in ft_win_list if not np.isnan(v)]))
+                        except:
+                            FEAT_STORE[f'{ft}_SMcfvar'].append(variation([v for v in ft_win_list if not np.all(np.isnan(v))]))
+                        # TODO: add heartrate features??
 
                 # TODO: try for cnn -> interpolate single sm-features into 
                 # n=100 (zB) mask, 0-padding for n-sm <100 windows
@@ -513,126 +537,5 @@ def get_feat_df_for_pred(
     return ft_full_ses
 
 
-
-@dataclass
-class SubmoveData2Feat:
-    """
-    - svm: array of merged svm-arrays of i.e. all submovements
-        within a window
-    """
-    acc_svm: np.ndarray = field(default_factory=lambda: np.array([]))
-    sm_durations: np.ndarray = field(default_factory=lambda: np.array([]))
-    hr: np.ndarray = field(default_factory=lambda: np.array([]))
-    sfreq: int = 32
-
-    # functions standby, executed on active calling
-    
-    ### SUBMOVEMENT FEATURES
-
-    def run_sm_count(self):
-        value = len(self.sm_durations)
-        return value
-    
-    def run_sm_duration_mean(self):
-        value = np.nanmean(self.sm_durations)
-        if np.isnan(value): value = 0
-        return value
-    
-    def run_sm_duration_std(self):
-        value = np.nanstd(self.sm_durations)
-        if np.isnan(value): value = 0
-        return value
-    
-    def run_sm_duration_coefvar(self):
-        value = variation(self.sm_durations)
-        if np.isnan(value): value = 0
-        return value
-    
-
-    ### ACC FEATURES
-
-    def run_rms_acc(self):
-        value = acc_fts.get_rms_acc(self)
-        # normalize to length of submovement data
-        value = value / len(self.acc_svm)
-        return value
-    
-    def run_svm_coefvar(self):
-        value = acc_fts.get_svm_var(self)
-        if np.isnan(value): value = 0
-        return value
-    
-    def run_svm_sd(self):
-        value = acc_fts.get_svm_sd(self)
-        return value
-    
-    def run_iqr_acc(self):
-        value = acc_fts.get_iqr_acc(self)
-        return value
-    
-    def run_lowpass_rms(self):
-        value = acc_fts.get_lp_rms_acc(self)
-        # normalize to length of submovement data
-        value = value / len(self.acc_svm)
-        return value
-    
-    def run_jerk_magn(self):
-        value = acc_fts.get_jerk_magn(self=self)
-        return value
-          
-    def run_pow_4_7_ratio(self):
-        value = acc_fts.get_pow(self, f_lo=4, f_hi=7,
-                                include_low=True, include_high=True,
-                                RATIO_TO_ALL_HZ=True,)
-        if np.isnan(value): value = 0
-        return value
-    
-    def run_pow_8_12_ratio(self):
-        value = acc_fts.get_pow(self, f_lo=8, f_hi=12,
-                                include_low=True, include_high=True,
-                                RATIO_TO_ALL_HZ=True,)
-        if np.isnan(value): value = 0
-        return value
-    
-    def run_pow_4_12(self):
-        value = acc_fts.get_pow(self, f_lo=4, f_hi=12,
-                                include_low=True, include_high=True,
-                                RATIO_TO_ALL_HZ=False,)
-        return value
-    
-    def run_pow_1_3(self):
-        value = acc_fts.get_pow(self, f_lo=1, f_hi=3,
-                                include_low=True, include_high=True,
-                                RATIO_TO_ALL_HZ=False,)
-        return value
-
-    
-    # HEARTRATE FEATURES
-    def run_hr_mean(self):
-        value = np.nanmean(self.hr)
-        return value
-    
-    def run_hr_std(self):
-        value = np.nanstd(self.hr)
-        return value
-
-    def run_hr_coefvar(self):
-        value = variation(self.hr)
-        return value
-
-
-    # initiated on creation
-    def __post_init__(self):
-        # if window doesnt have any submovements, set 0-array to generate zeros and NaNs
-        if len(self.acc_svm) == 0:
-            setattr(self, 'acc_svm', np.zeros(self.sfreq))
-
-        # always set psds ready for other features
-        self.fx, self.psx = acc_fts.get_psd(self)
-
-        # clean heartrate up, replace 0s with NaNs
-        if len(self.hr) > 0:
-            # self.hr_clean = [h if not h==0 else np.nan for h in self.hr]
-            self.hr = [v if v != 0 else np.nan for v in self.hr]
 
 
