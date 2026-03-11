@@ -695,7 +695,7 @@ def get_zero_crossing_rate(self):
         col = triax[:, i]
         crossings = int(np.sum(np.diff(np.sign(col)) != 0))
         zcr.append(crossings / duration_s)
-    return tuple(zcr)  # (zcr_x, zcr_y, zcr_z)
+    return np.mean(zcr)  # (zcr_x, zcr_y, zcr_z)
 
 
 # ---------------------------------------------------------------------------
@@ -818,13 +818,14 @@ def get_skewness(self):
 def get_axis_correlations(self):
     """Pearson correlation between each pair of accelerometer axes.
 
-    Returns (corr_xy, corr_xz, corr_yz).
+    Returns the mean of the correlations (corr_xy, corr_xz, corr_yz).
     """
     if not hasattr(self, 'acc_triax') or self.acc_triax is None:
         return np.nan, np.nan, np.nan
     # np.corrcoef avoids scipy pearsonr incompatibility with numpy >= 2.0
     C = np.corrcoef(np.asarray(self.acc_triax, dtype=float).T)  # shape (3, 3)
-    return float(C[0, 1]), float(C[0, 2]), float(C[1, 2])
+    values = float(C[0, 1]), float(C[0, 2]), float(C[1, 2])
+    return np.mean(values)
 
 
 # ---------------------------------------------------------------------------

@@ -108,7 +108,6 @@ def get_features_per_session(
     )
     if not os.path.exists(FIGDIR): os.makedirs(FIGDIR)
 
-    # TODO: at time of finalizing features, store exact feature extr settings
     if ONLY_EMA_WINDOWS:
         FEATDIR = os.path.join(
             finding_paths.get_home_onedrive('data'),
@@ -472,6 +471,8 @@ def remove_noSubmove_rows(ft_full_ses):
 def get_feat_df_for_pred(
     sub_id, ses_id, ft_set_sel,
     ONLY_EMA_WINDOWS=True,
+    REMOVE_ZERO_SUBMOVES=False,
+    FT_PARAMS_VERSION='v1',
     verbose=False,
 ):
 
@@ -502,6 +503,7 @@ def get_feat_df_for_pred(
         sub_id=sub_id,
         ses_id=ses_id,
         LOAD_SAVE_FEATS = True,
+        FT_PARAMS_VERSION=FT_PARAMS_VERSION,
         # define how features should be extracted
         STORE_SUBMOVES = False,
         # plotting settings
@@ -524,7 +526,7 @@ def get_feat_df_for_pred(
         ft_full_ses = ft_full_ses.set_index(keys="timestamp")
         
     ### identify and remove rows without submovements for submovement ft sets
-    if ft_set_sel.startswith('sm'):
+    if ft_set_sel.startswith('sm') and REMOVE_ZERO_SUBMOVES:
         ft_full_ses = remove_noSubmove_rows(ft_full_ses)
 
     # check missings

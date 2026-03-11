@@ -127,7 +127,9 @@ class SubmoveData2Feat:
     # spectral features
 
     def run_dom_freq_above_3(self):
-        value = acc_fts.get_dom_freq(self)
+        value = acc_fts.get_dom_freq(
+            self, f_lo=3, include_low=False,
+            f_hi=12, include_high=True,)
         return value
           
     def run_pow_4_7_ratio(self):
