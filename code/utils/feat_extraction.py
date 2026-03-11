@@ -43,15 +43,26 @@ from dbs_home.load_raw.main_load_raw import loadSubject
 
 
 def get_feat_params(version='v1'):
-
+    """
+    Load feat extraction params from json file in same folder,
+    defined by version string.
+    
+    Returns:
+    - FEATS_INCL: list of feat keys that are set to True in json file
+    - EMA_CODING: dict with EMA question coding, defined in json file
+    """
     # get current folder
     dir = os.path.dirname(os.path.abspath(__file__))
     # load json that is in current folder
     with open(os.path.join(dir, f'feat_extraction_params_{version}.json')) as f:
         params = json.load(f)
 
-    FEATS_INCL = params['FEATS_INCL']
+    FEATS_INCL = [
+        ft_key for ft_key, include in params['FEATS_INCL'].items()
+        if include
+    ]
     EMA_CODING = params['EMA_CODING']
+
 
     return FEATS_INCL, EMA_CODING
 

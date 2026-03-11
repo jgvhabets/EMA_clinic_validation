@@ -1,17 +1,66 @@
 # import libraries
+import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import skew as scipy_skew
 
 
 # current repo imports
+from utils.load_utils import get_onedrive_path
+from utils.pred_utils import check_skewness
 
-def check_skewness(vals, threshold=1.0):
-    """Check if the skewness of the values exceeds a threshold."""
-    skewness = scipy_skew(vals)
-    skewed_bool = abs(skewness) > threshold
+def plot_ft_distribution(
+    ft_df, ft_name, EMA_ref,
+    sub_id, SES, FT_TYPE, FT_PARAMS_VERSION,
+    save_plot=False,
+):
+    
+    
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
 
-    return skewed_bool, skewness
+    axes[0] = plot_ft_hist(
+        df=ft_df,
+        feat_name=ft_name,
+        ax=axes[0],
+        show=False,
+    )
+
+    axes[1] = scatter_feat_vs_EMA(
+        df=ft_df,
+        feat_name=ft_name,
+        EMA_col_name=EMA_ref,
+        ax=axes[1],
+        show=False,
+    )
+
+    axes[2] = boxplot_feat_vs_EMA(
+        df=ft_df,
+        feat_name=ft_name,
+        EMA_col_name=EMA_ref,
+        ax=axes[2],
+        show=False,
+    )
+
+    plt.tight_layout()
+
+    if save_plot:
+        lid_fts_figpath = os.path.join(
+            get_onedrive_path('emaval_fig'),
+            'acc_lid_ft_explore', 
+            f'{sub_id}_{SES}_{FT_TYPE}_ft{FT_PARAMS_VERSION}'
+        )
+        if not os.path.exists(lid_fts_figpath):
+            os.makedirs(lid_fts_figpath)
+        plt.savefig(os.path.join(lid_fts_figpath,
+                                 f'{ft_name}_{FT_PARAMS_VERSION}_explore.png'),
+                    facecolor='w', dpi=300,)
+        plt.close()
+
+    else:
+        plt.show()
+
+
+
+
 
 
 def plot_ft_hist(

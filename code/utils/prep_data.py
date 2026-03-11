@@ -298,3 +298,42 @@ def get_train_test_split(sumdf):
     return train_subs, test_subs
 
 
+### for FT version 2 where certain columns are string lists, convert to mean value
+
+# def col_strlist_to_mean(col_str):
+#     new_col = []
+
+#     for s in col_str:
+       
+#         if isinstance(s, float) and not np.isnan(s):
+#             new_col.append(s)
+#             continue
+
+#         elif isinstance(s, float) and np.isnan(s):
+#             new_col.append(np.nan)
+#             continue
+
+        
+#         if isinstance(s, str):
+#             if ', ' in s:
+#                 s = s[1:-1].split(', ')
+#             elif ' ' in s:
+#                 s = s[1:-1].split(' ')
+#             else:
+#                 print(f'Unexpected string format: {s}')
+            
+#         try:
+#             m = np.mean([float(val) for val in s if val != ''])
+#         except:
+#             print(f'Error processing string: {s}')
+            
+#         new_col.append(m)
+
+#     return new_col
+
+# string_columns = ['zero_crossing_rate', 'axis_correlations']
+
+# for col in ema_df.keys():
+#     if any([s in col for s in string_columns]):
+#         print(f'Converting column {col} from string to mean value.')
+#         ema_df[col] = col_strlist_to_mean(ema_df[col])
