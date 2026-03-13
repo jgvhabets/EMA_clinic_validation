@@ -1,0 +1,43 @@
+{
+    "FEATS_INCL": {
+        "rms_acc": true,
+        "mean_acc": false,
+        "svm_coefvar": true,
+        "svm_sd": true,
+        "iqr_acc": false,
+        "lowpass_rms": true,
+        "jerk_magn": false,
+        "dom_freq_above_3": true,
+        "pow_4_7_ratio": true,
+        "pow_8_12_ratio": true,
+        "pow_4_12": true,
+        "pow_1_3": true,
+        "hr_mean": true,
+        "hr_std": true,
+        "hr_coefvar": true,
+        "sm_count": true,
+        "sm_duration_mean": true,
+        "sm_duration_std": true,
+        "sm_duration_coefvar": true,
+        "mav_per_axis": false,
+        "peak_acc": false,
+        "jerk_rms": true,
+        "zero_crossing_rate": true,
+        "approx_entropy": true,
+        "autocorr_lag1": true,
+        "spectral_entropy": true,
+        "spectral_edge_freq": false,
+        "kurtosis": false,
+        "skewness": false,
+        "axis_correlations": false,
+        "svm_var_to_gravity_var_ratio": true
+    },
+    "EMA_CODING": {
+        "tremor": "Q7",
+        "LID": "Q8",
+        "overall_move": "Q6",
+        "move_hands": "Q10",
+        "med_state": "Q11",
+        "wellbeing": "Q1"
+    }
+}

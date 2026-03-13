@@ -296,12 +296,15 @@ def get_features_per_session(
             )
 
             # select heartrate for current window
-            t1 = windat.acc_times[0]
-            t2 = windat.acc_times[-1]
-            hr_sel = np.logical_and(hr_day_data['timestamp'] > t1,
-                                    hr_day_data['timestamp'] < t2)
-            hr_win = hr_day_data[hr_sel].reset_index(drop=True)
-            hr = [h if not h==0 else np.nan for h in hr_win[' HeartRate'].values]
+            if hr_day_data is None:
+                hr = None
+            else:
+                t1 = windat.acc_times[0]
+                t2 = windat.acc_times[-1]
+                hr_sel = np.logical_and(hr_day_data['timestamp'] > t1,
+                                        hr_day_data['timestamp'] < t2)
+                hr_win = hr_day_data[hr_sel].reset_index(drop=True)
+                hr = [h if not h==0 else np.nan for h in hr_win[' HeartRate'].values]
 
             TIME_STORE.append(t1)
 
@@ -321,7 +324,7 @@ def get_features_per_session(
 
                     # extract all feats that are defined in FEATS_INCL (no submove feats)
                     for ft in list(FEAT_STORE.keys()):
-                        if verbose: print(f'...extracting {ft} from full window data (window # {i_win} / {n_daywindows_found})')
+                        if verbose: print(f'...extracting {ft} from full window data (window # {i_win+1} / {n_daywindows_found})')
                         value = getattr(win_ft_class, f'run_{ft}')()  # extra brackets () for executing function
                         FEAT_STORE[ft].append(value)
 
@@ -397,7 +400,7 @@ def get_features_per_session(
                     ):
                         # do not add single merged acc feats if they be calculated on singlemoves
                         continue
-                    if verbose: print(f'...extracting {ft} from full window data (window # {i_win} / {n_daywindows_found})')
+                    if verbose: print(f'...extracting {ft} (sm_merged) from full window data (window # {i_win+1} / {n_daywindows_found})')
                     if SMs_PRESENT:
                         value = getattr(sm_ft_class, f'run_{ft}')()  # extra brackets () for executing function
                     else:
@@ -412,8 +415,8 @@ def get_features_per_session(
                         if len(sm_win_data) == 0:
                             ft_win_list.append(0)
                         else:
-                            for sm in sm_win_data:
-                                if verbose: print(f'...extracting {ft} from full window data (window # {i_win} / {n_daywindows_found})')
+                            for i_sm, sm in enumerate(sm_win_data):
+                                if verbose: print(f'...extracting {ft} from single-submove {i_sm+1} ({len(sm_win_data)}) in full window data (window # {i_win+1} / {n_daywindows_found})')
                                 single_sm_class = SubmoveData2Feat(
                                     acc_svm=sm.svm,
                                     acc_triax=sm.triax_acc,
@@ -461,6 +464,24 @@ def get_features_per_session(
             PRED_DF[k] = v
         PRED_DF.to_csv(os.path.join(FEATDIR, feat_filename))
 
+        return PRED_DF
+    
+    
+    ### return after first creation
+    if not ONLY_EMA_WINDOWS:
+        # replicated code from loading, but now with created features
+        # check per day for ALL WINDOWS, and return as dict
+        avail_files = [f for f in os.listdir(FEATDIR) if feat_filename.split('.')[0] in f]
+        if len(avail_files) == 0:
+            print(f'no matching files in {FEATDIR}, features will be created')
+            return None
+        else:
+            PRED_DF = {}
+            for f in avail_files:
+                day_code = f.split('.')[0][-8:]
+                PRED_DF[day_code] = read_csv(os.path.join(FEATDIR, f), index_col=0,)
+                print(f'features loaded from {FEATDIR}, file: {f}')
+            return PRED_DF
 
 
 def remove_noSubmove_rows(ft_full_ses):

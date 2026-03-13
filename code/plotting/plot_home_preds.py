@@ -4,45 +4,189 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from sklearn.feature_selection import f_regression
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, mannwhitneyu
 
 from utils.load_utils import get_onedrive_path
+from utils.data_handling_ema_acc import get_ft_daily_mean
+
+
+
+SES_COLORS = {'ses01': 'violet', 'ses02': 'orange', 'ses03': 'darkcyan'}
+SES_LABELS = {'ses01': 'pre-DBS', 'ses02': 'post-DBS (not optimized)', 'ses03': 'post-DBS'}
+
+FONT_SIZES = {
+    'title': 16,
+    'axes': 14,
+    'ticks': 12,
+}
+EMA_YTICKS = np.arange(1, 10)
+EMA_YTICK_LABELS = ['1', '', '3', '', '5', '', '7', '', '9']
+
+
+def box_fullsession_preds(
+    y_preds, session_code, target_EMA_name, ax=None,
+    VIOLIN=False, sign_asterix=False,
+):
+    # create boxplots splitted on session_code
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+        return_ax = False
+    else:
+        return_ax = True
+
+    avail_ses = np.unique(session_code)
+    box_data = [y_preds[session_code == ses_id]
+                for ses_id in avail_ses]
+    positions = [(i*.25) + 1 for i in range(len(avail_ses))]
+
+    if VIOLIN:
+        vp = ax.violinplot(box_data, positions=positions,
+                           showmedians=False, showextrema=False, widths=0.75)
+
+        # clip each violin to a half: even index → right half, odd index → left half
+        for i, (body, ses_id) in enumerate(zip(vp['bodies'], avail_ses)):
+            pos = positions[i]
+            for path in body.get_paths():
+                verts = path.vertices
+                if i % 2 == 0:  # right half only
+                    verts[verts[:, 0] > pos, 0] = pos
+                else:            # left half only
+                    verts[verts[:, 0] < pos, 0] = pos
+            body.set_facecolor(SES_COLORS[ses_id])
+            body.set_alpha(0.7)
+            body.set_edgecolor('black')
+            body.set_linewidth(0.8)
+
+        # overlay boxplot lines
+        ax.boxplot(box_data, positions=positions, widths=0.1,
+                   patch_artist=False, manage_ticks=False,
+                   medianprops=dict(color='black', linewidth=2),
+                   whiskerprops=dict(color='black', linewidth=1.2),
+                   capprops=dict(color='black', linewidth=1.2),
+                   boxprops=dict(color='black', linewidth=1.2),
+                   flierprops=dict(marker='o', markersize=3,
+                                   markeredgecolor='black', alpha=0.5))
+    else:
+        # boxplot
+        bp = ax.boxplot(box_data, positions=positions, widths=0.75,
+                        patch_artist=True, manage_ticks=False,
+                        medianprops=dict(color='black', linewidth=2),
+                        whiskerprops=dict(color='black', linewidth=1.2),
+                        capprops=dict(color='black', linewidth=1.2),
+                        boxprops=dict(color='black', linewidth=1.2),
+                        flierprops=dict(marker='o', markersize=3,
+                                        markeredgecolor='black', alpha=0.5))
+        # color each box by session
+        for patch, ses_id in zip(bp['boxes'], avail_ses):
+            patch.set_facecolor(SES_COLORS[ses_id])
+            patch.set_alpha(0.7)
+    
+    if sign_asterix:
+        # add significance asterix for Mann-Whitney U test between ses01 and ses03
+        stat, p = mannwhitneyu(box_data[0], box_data[1], alternative='two-sided')
+        if p < 0.05:
+            ax.text(np.mean(positions), 9, ha='center', va='center',
+                    s='*', fontsize=FONT_SIZES['title'] + 8, color='k',)
+
+    # ax.set_xlabel('Session', fontsize=FONT_SIZES['axes'])
+    if not VIOLIN: ax.set_xticks(positions)
+    else: ax.set_xticks([positions[0] - .15, positions[-1] + .15],)
+    ax.set_xticklabels([SES_LABELS[ses_id] for ses_id in avail_ses],
+                       fontsize=FONT_SIZES['axes'])
+    ax.set_yticks(EMA_YTICKS)
+    ax.set_yticklabels(EMA_YTICK_LABELS, fontsize=FONT_SIZES['ticks'],)
+    ax.set_ylabel(f'Predicted {target_EMA_name} (EMA scale)', fontsize=FONT_SIZES['axes'])
+    ax.tick_params(axis='both', size=FONT_SIZES['ticks'],
+                   labelsize=FONT_SIZES['ticks'],)
+    if return_ax:
+        return ax
+    
+    plt.show()
+
+
+
+
 
 
 def plot_daily_ft_mean(
-    daily_minutes, daily_mean, daily_std, ft_name,
-    use_ax = None, FS=12, plot_color = 'olivedrab',
+    y_preds, y_times, session_code, ema_target_name,
+    ax = None,
 ):
-
-    
-    xtick_hop = 8
-
-    if not use_ax:
+    # plot defaults
+    if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 3))
         RETURN_AX = False
     else:
-        ax = use_ax
         RETURN_AX = True
 
-    ax.plot(daily_minutes, daily_mean, color=plot_color, lw=3,)
-    ax.fill_between(daily_minutes, y1=daily_mean - daily_std,
-                    y2=daily_mean + daily_std, alpha=.3,
-                    color=plot_color,)
+    xtick_hop = 8
 
-    ax.set_xticks(daily_minutes[::xtick_hop])
-    ax.set_xticklabels((np.array(daily_minutes[::xtick_hop])/60).astype(int),
-                    fontsize=FS,)
 
-    if not use_ax:
-        ax.set_xlabel('Time at Day (hours)', fontsize=FS,)
+    avail_ses = np.unique(session_code)
+    ses_preds = {ses_id: y_preds[session_code == ses_id]
+                 for ses_id in avail_ses}
+    ses_times = {ses_id: y_times[session_code == ses_id]
+                 for ses_id in avail_ses}
+    
+    # plot each session separately
+    for i_ses, ses_id in enumerate(avail_ses):
+        # allocate all prediction based on their time within the day (in minutes)
+        # returns day-pattern (mean and std) per block of default 15 min
+        (
+            ses_min_raster, ses_day_mean, ses_day_std
+        ) = get_ft_daily_mean(ses_preds[ses_id], ses_times[ses_id], MINUTE_HOP=30,)
+    
+        ax.plot(ses_min_raster, ses_day_mean, lw=5, color=SES_COLORS[ses_id],
+                alpha=.7, label=SES_LABELS[ses_id],)
+        ax.fill_between(ses_min_raster, y1=ses_day_mean - ses_day_std,
+                        y2=ses_day_mean + ses_day_std, alpha=.15,
+                        color=SES_COLORS[ses_id],)
 
-        ax.set_ylabel(ft_name, fontsize=FS,)
+    ax.legend(fontsize=FONT_SIZES['title'], loc='upper right',)
+
+    ax.set_xticks(ses_min_raster[::xtick_hop],)
+    ax.set_xlim(ses_min_raster[0], ses_min_raster[-4])
+    xtlabs = (np.array(ses_min_raster[::xtick_hop])/60).astype(int)
+    ax.set_xticklabels([f'{h:02d}:00' for h in xtlabs], fontsize=FONT_SIZES['ticks'],)  
+    ax.set_xlabel('Time at Day (hours)', fontsize=FONT_SIZES['axes'],)
+
+    ax.set_ylim(1, 9)
+    ax.set_yticks(EMA_YTICKS)
+    ax.set_yticklabels(EMA_YTICK_LABELS, fontsize=FONT_SIZES['ticks'],)
+    ax.set_ylabel(f'Predicted {ema_target_name} (EMA scale)', fontsize=FONT_SIZES['axes'],)
+
+    ax.tick_params(labelsize=FONT_SIZES['ticks'], size=FONT_SIZES['ticks'], axis='both',)
 
     if RETURN_AX:
         return ax
     else:
         plt.show()
 
+
+"""
+back up, plot EMA daily mean, current data not sufficient
+
+tempdf = ft_extr.get_feat_df_for_pred(
+        sub_id=sub_id,
+        ses_id=ses_id,
+        ft_set_sel=FT_TYPE,
+        FT_PARAMS_VERSION=FT_PARAMS_VERSION,
+        ONLY_EMA_WINDOWS=True,
+    )
+    ema_values = tempdf[EMA_Y]
+    ema_times = tempdf['timestamp']
+
+
+    (
+        ses_min_raster, ses_day_mean, ses_day_std
+    ) = data_handling.get_ft_daily_mean(ema_values.values, ema_times, MINUTE_HOP=30,)
+
+    ax.plot(ses_min_raster, ses_day_mean, lw=5, color=SES_COLORS[ses_id],
+            alpha=.7,)
+    ax.fill_between(ses_min_raster, y1=ses_day_mean - ses_day_std,
+                    y2=ses_day_mean + ses_day_std, alpha=.15,
+                    color=SES_COLORS[ses_id],)
+"""
 
 def scatter_preds(
     y, y_pred_total,
@@ -102,4 +246,4 @@ def scatter_preds(
     if show: plt.show()
     else: plt.close()
 
-    
+

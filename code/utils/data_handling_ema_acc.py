@@ -44,22 +44,26 @@ def get_submove_day_timestamps(
         ONLY_TIMES=True, SUBMOVE_version=SUBMOVE_version,
     )
 
-    # get submovement start and ends (from json-dict)
-    sm_time_arr = np.array([list(s.values()) for s in sm_day_times['submovements']])
-    # get array with datetime objects for starts and ends
-    sm_day_starts = np.array([dt.datetime.strptime(t, "%Y-%m-%dT%H:%M:%S.%f")
-                            for t in sm_time_arr[:, 0]])
-    sm_day_ends = np.array([dt.datetime.strptime(t, "%Y-%m-%dT%H:%M:%S.%f")
-                        for t in sm_time_arr[:, 1]])
-    
-    sm_durations = sm_day_ends - sm_day_starts
-    sel_submoves = np.logical_and(
-        sm_durations > dt.timedelta(seconds=SM_MIN_DUR),
-        sm_durations < dt.timedelta(seconds=SM_MAX_DUR),
-    )
-    sm_day_starts = sm_day_starts[sel_submoves]
-    sm_day_ends = sm_day_ends[sel_submoves]
-    
+    try:
+        # get submovement start and ends (from json-dict)
+        sm_time_arr = np.array([list(s.values()) for s in sm_day_times['submovements']])
+        # get array with datetime objects for starts and ends
+        sm_day_starts = np.array([dt.datetime.strptime(t, "%Y-%m-%dT%H:%M:%S.%f")
+                                for t in sm_time_arr[:, 0]])
+        sm_day_ends = np.array([dt.datetime.strptime(t, "%Y-%m-%dT%H:%M:%S.%f")
+                            for t in sm_time_arr[:, 1]])
+        
+        sm_durations = sm_day_ends - sm_day_starts
+        sel_submoves = np.logical_and(
+            sm_durations > dt.timedelta(seconds=SM_MIN_DUR),
+            sm_durations < dt.timedelta(seconds=SM_MAX_DUR),
+        )
+        sm_day_starts = sm_day_starts[sel_submoves]
+        sm_day_ends = sm_day_ends[sel_submoves]
+    except:
+        print(f'no submovement times found for {sub}, {ses}, day {day}')
+        sm_day_starts, sm_day_ends = np.array([]), np.array([])
+        
     return sm_day_starts, sm_day_ends
 
 
@@ -230,11 +234,11 @@ def get_daily_minutes_mask(HR_START=8, HR_END=22, WIN_LEN_minutes=15):
 
 
 def get_ft_daily_mean(
-    ft_values, ft_times,
+    ft_values, ft_times, MINUTE_HOP=15,
     PLOT_SAMPLE_DISTRIBUTION=False,
 ):
     
-    mask_minutes = get_daily_minutes_mask()
+    mask_minutes = get_daily_minutes_mask(WIN_LEN_minutes=MINUTE_HOP,)
     mask_dict = {m: [] for m in mask_minutes}
 
     for i, v in enumerate(ft_values):
