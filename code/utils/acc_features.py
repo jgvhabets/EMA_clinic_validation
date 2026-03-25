@@ -188,14 +188,26 @@ def get_iqr_acc(self):
 
 def get_tremor_power_ratio_3_7_over_3_7_plus_7_12(self):
     """
-    3–7 Hz: [3, 7)  -> include_low=True, include_high=True
-    7–12 Hz: [7,12] -> include_low=True, include_high=True
+    Return the ratio of 3–7 Hz power to the combined 3–7 Hz and 7–12 Hz power
+
+    3–7 Hz uses the interval [3, 7]
+    7–12 Hz uses the interval [7, 12]
     """
 
-    pow_3_7 = get_pow(self, 3.0, 7.0,
-                      include_low=True, include_high=True)
-    pow_7_12 = get_pow(self, 7.0, 12.0,
-                       include_low=True, include_high=True)
+    pow_3_7 = get_pow(
+        self,
+        3.0,
+        7.0,
+        include_low=True,
+        include_high=True,
+    )
+    pow_7_12 = get_pow(
+        self,
+        7.0,
+        12.0,
+        include_low=True,
+        include_high=True,
+    )
 
     if np.isnan(pow_3_7) or np.isnan(pow_7_12):
         return np.nan
@@ -212,14 +224,17 @@ def get_tremor_power_ratio_3_7_over_3_7_plus_7_12(self):
 def get_pow_ratio_to_total(self, f_lo, f_hi,
                            include_low=True, include_high=True):
     """
-    examples
-    # 4–8 Hz (>=4 & <=8) over total:
-    # get_pow_ratio_to_total(self, 4.0, 8.0,
-    #                        include_low=True, include_high=True)
+    Return the ratio of band power to total spectral power
 
-    # 3–7 Hz (>=3 & <7) over total:
-    # get_pow_ratio_to_total(self, 3.0, 7.0,
-    #                        include_low=True, include_high=True)
+    Args:
+        f_lo: Lower frequency bound
+        f_hi: Upper frequency bound
+        include_low: Whether to include the lower bound
+        include_high: Whether to include the upper bound
+
+    Examples:
+        4–8 Hz using [4, 8]
+        3–7 Hz using [3, 7]
     """
 
     band_pow = get_pow(
@@ -245,15 +260,17 @@ def get_pow_ratio_to_total(self, f_lo, f_hi,
 def get_mean_pow(self, f_lo, f_hi,
                  include_low=True, include_high=True):
     """
-    examples:
+    Return the mean power within a frequency interval
 
-    # mean power in 0.2–4 Hz:
-    # get_mean_pow(self, 0.2, 4.0,
-    #              include_low=True, include_high=True)
+    Args:
+        f_lo: Lower frequency bound
+        f_hi: Upper frequency bound
+        include_low: Whether to include the lower bound
+        include_high: Whether to include the upper bound
 
-    # mean power in 3.8 Hz:
-    # get_mean_pow(self, 3.0, 8.0,
-    #              include_low=True, include_high=True)
+    Examples:
+        Mean power in 0.2–4 Hz
+        Mean power in 3–8 Hz
     """
 
     fx = self.fx
@@ -281,15 +298,17 @@ def get_mean_pow(self, f_lo, f_hi,
 def get_peak_pow(self, f_lo, f_hi,
                  include_low=True, include_high=True):
     """
-    examples:
-    
-    # peak power in 0.2–4 Hz:
-    # get_peak_pow(self, 0.2, 4.0,
-    #              include_low=True, include_high=True)
+    Return the maximum power within a frequency interval
 
-    # peak power in 3–8 Hz:
-    # get_peak_pow(self, 3.0, 8.0,
-    #              include_low=True, include_high=True)
+    Args:
+        f_lo: Lower frequency bound
+        f_hi: Upper frequency bound
+        include_low: Whether to include the lower bound
+        include_high: Whether to include the upper bound
+
+    Examples:
+        Peak power in 0.2–4 Hz
+        Peak power in 3–8 Hz
     """
 
     fx = self.fx
@@ -315,6 +334,9 @@ def get_peak_pow(self, f_lo, f_hi,
 
 
 def get_dominant_energy_ratio(self):
+    """
+    Return the ratio of the maximum spectral power to total spectral power
+    """
 
     if not hasattr(self, "psx") or self.psx is None:
         return np.nan
@@ -330,6 +352,9 @@ def get_dominant_energy_ratio(self):
 
 
 def get_energy_dom_pm05(self):
+    """
+    Return the spectral energy within ±0.5 Hz of the dominant frequency
+    """
 
     dom_freq = get_dom_freq(self)
     if dom_freq is None or np.isnan(dom_freq):
@@ -350,6 +375,9 @@ def get_energy_dom_pm05(self):
 
 
 def get_log_energy_3_5_7_5(self):
+    """
+    Return the natural logarithm of spectral energy in the 3.5–7.5 Hz band
+    """
 
     fx = self.fx
     psx = self.psx
@@ -359,13 +387,22 @@ def get_log_energy_3_5_7_5(self):
         return np.nan
 
     energy = float(np.sum(psx[mask]))
-    log_energy = float(np.log(energy + 1e-12))  # avoid log(0)
+    log_energy = float(np.log(energy + 1e-12))
 
     return log_energy
 
 
-
 def _get_lowpass_acc(self, fc=3.5, order=4):
+    """
+    Return the low-pass filtered acceleration magnitude signal
+
+    Args:
+        fc: Low-pass cutoff frequency in Hz
+        order: Butterworth filter order
+
+    Returns:
+        The filtered acceleration signal, or None when filtering cannot be performed
+    """
 
     if getattr(self, "sfreq", None) is None or self.acc_svm is None:
         return None
@@ -386,6 +423,12 @@ def _get_lowpass_acc(self, fc=3.5, order=4):
 
 
 def get_lp_rms_acc(self, fc=3.5):
+    """
+    Return the RMS of the low-pass filtered acceleration magnitude
+
+    Args:
+        fc: Low-pass cutoff frequency in Hz
+    """
 
     acc_lp = _get_lowpass_acc(self, fc=fc)
     if acc_lp is None:
@@ -397,6 +440,12 @@ def get_lp_rms_acc(self, fc=3.5):
 
 
 def get_lp_range_acc(self, fc=3.5):
+    """
+    Return the range of the low-pass filtered acceleration magnitude
+
+    Args:
+        fc: Low-pass cutoff frequency in Hz
+    """
 
     acc_lp = _get_lowpass_acc(self, fc=fc)
     if acc_lp is None:
@@ -408,20 +457,37 @@ def get_lp_range_acc(self, fc=3.5):
 
 
 def _get_lp_psd(self, fc=3.5):
+    """
+    Compute the PSD of the low-pass filtered acceleration magnitude
+
+    Args:
+        fc: Low-pass cutoff frequency in Hz
+
+    Returns:
+        A tuple of frequency and PSD arrays, or None when the PSD cannot be computed
+    """
 
     acc_lp = _get_lowpass_acc(self, fc=fc)
     if acc_lp is None:
         return None
 
     fx_lp, psx_lp = welch(
-        x=acc_lp, fs=self.sfreq,
-        nperseg=self.sfreq, noverlap=0,
+        x=acc_lp,
+        fs=self.sfreq,
+        nperseg=self.sfreq,
+        noverlap=0,
     )
 
     return fx_lp, psx_lp
 
 
 def get_lp_dom_freq(self, fc=3.5):
+    """
+    Return the dominant frequency of the low-pass filtered acceleration signal
+
+    Args:
+        fc: Low-pass cutoff frequency in Hz
+    """
 
     res = _get_lp_psd(self, fc=fc)
     if res is None:
@@ -438,12 +504,18 @@ def get_lp_dom_freq(self, fc=3.5):
 
 
 def get_lp_dominant_energy_ratio(self, fc=3.5):
+    """
+    Return the ratio of the maximum low-pass PSD value to total low-pass PSD power
+
+    Args:
+        fc: Low-pass cutoff frequency in Hz
+    """
 
     res = _get_lp_psd(self, fc=fc)
     if res is None:
         return np.nan
 
-    fx_lp, psx_lp = res  
+    fx_lp, psx_lp = res
     total_lp = float(np.sum(psx_lp))
     if total_lp <= 0:
         return np.nan
@@ -454,8 +526,17 @@ def get_lp_dominant_energy_ratio(self, fc=3.5):
     return ratio_lp
 
 
-
 def _norm_xcorr_and_lag(a, b):
+    """
+    Compute the maximum normalized cross-correlation and its lag
+
+    Args:
+        a: First input signal
+        b: Second input signal
+
+    Returns:
+        A tuple containing the maximum normalized correlation and the lag at that maximum
+    """
 
     a0 = a - np.mean(a)
     b0 = b - np.mean(b)
@@ -471,6 +552,9 @@ def _norm_xcorr_and_lag(a, b):
 
 
 def get_max_norm_xcorr(self):
+    """
+    Return the largest pairwise normalized cross-correlation across triaxial acceleration axes
+    """
 
     if not hasattr(self, "acc_triax") or self.acc_triax is None:
         return np.nan
@@ -494,7 +578,10 @@ def get_max_norm_xcorr(self):
 
 
 def get_lag_at_max_norm_xcorr(self):
- 
+    """
+    Return the lag corresponding to the largest pairwise normalized cross-correlation
+    """
+
     if not hasattr(self, "acc_triax") or self.acc_triax is None:
         return np.nan
 
@@ -507,7 +594,7 @@ def get_lag_at_max_norm_xcorr(self):
     corr_yz, lag_yz = _norm_xcorr_and_lag(y, z)
 
     corrs = np.array([corr_xy, corr_xz, corr_yz], dtype=float)
-    lags  = np.array([lag_xy, lag_xz, lag_yz], dtype=float)
+    lags = np.array([lag_xy, lag_xz, lag_yz], dtype=float)
 
     if np.all(np.isnan(corrs)):
         return np.nan
@@ -516,16 +603,27 @@ def get_lag_at_max_norm_xcorr(self):
     lag_at_max = float(lags[idx])
 
     return lag_at_max
-    
+
+
 def get_tremor_power_ratio_1_3_over_1_3_plus_3_12(self):
     """
-    ratio = pow(1–3) / (pow(1–3) + pow(3–12))
+    Return the ratio of 1–3 Hz power to the combined 1–3 Hz and 3–12 Hz power
     """
 
-    pow_1_3 = get_pow(self, 1.0, 3.0,
-                      include_low=True, include_high=True)
-    pow_3_12 = get_pow(self, 3.0, 12.0,
-                       include_low=True, include_high=True)
+    pow_1_3 = get_pow(
+        self,
+        1.0,
+        3.0,
+        include_low=True,
+        include_high=True,
+    )
+    pow_3_12 = get_pow(
+        self,
+        3.0,
+        12.0,
+        include_low=True,
+        include_high=True,
+    )
 
     if np.isnan(pow_1_3) or np.isnan(pow_3_12):
         ratio = np.nan
@@ -543,13 +641,23 @@ def get_tremor_power_ratio_1_3_over_1_3_plus_3_12(self):
 
 def get_tremor_power_ratio_3_12_over_1_3_plus_3_12(self):
     """
-    ratio = pow(3–12) / (pow(1–3) + pow(3–12))
+    Return the ratio of 3–12 Hz power to the combined 1–3 Hz and 3–12 Hz power
     """
 
-    pow_1_3 = get_pow(self, 1.0, 3.0,
-                      include_low=True, include_high=True)
-    pow_3_12 = get_pow(self, 3.0, 12.0,
-                       include_low=True, include_high=True)
+    pow_1_3 = get_pow(
+        self,
+        1.0,
+        3.0,
+        include_low=True,
+        include_high=True,
+    )
+    pow_3_12 = get_pow(
+        self,
+        3.0,
+        12.0,
+        include_low=True,
+        include_high=True,
+    )
 
     if np.isnan(pow_1_3) or np.isnan(pow_3_12):
         ratio = np.nan
@@ -567,10 +675,10 @@ def get_tremor_power_ratio_3_12_over_1_3_plus_3_12(self):
 
 def get_dom_freq_above_3(self, include_low=False):
     """
-    dominant frequency for f > 3 Hz (default) or f >= 3 Hz (include_low=True)
+    Return the dominant frequency above 3 Hz
 
-    NOTE: your get_dom_freq requires both f_lo and f_hi,
-          so f_hi is set to max(self.fx).
+    Args:
+        include_low: Whether to include 3 Hz in the search interval
     """
 
     if not hasattr(self, "fx") or self.fx is None or len(self.fx) == 0:
@@ -595,8 +703,10 @@ def get_dom_freq_above_3(self, include_low=False):
 
 def get_peak_pow_dom_freq_above_3(self, include_low=False):
     """
-    peak power (max psx) within f > 3 Hz (or >= 3 Hz).
-    this corresponds to the power at the dominant peak above 3 Hz.
+    Return the peak power above 3 Hz
+
+    Args:
+        include_low: Whether to include 3 Hz in the search interval
     """
 
     if not hasattr(self, "fx") or not hasattr(self, "psx"):
@@ -627,7 +737,10 @@ def get_peak_pow_dom_freq_above_3(self, include_low=False):
 
 def get_peak_pow_dom_freq_above_3_ratio_total(self, include_low=False):
     """
-    ratio = peak_pow_above_3 / total_pow
+    Return the ratio of peak power above 3 Hz to total spectral power
+
+    Args:
+        include_low: Whether to include 3 Hz in the peak search interval
     """
 
     peak_pow_above_3 = get_peak_pow_dom_freq_above_3(self, include_low=include_low)
@@ -648,6 +761,38 @@ def get_peak_pow_dom_freq_above_3_ratio_total(self, include_low=False):
 
     return ratio
 
+
+def get_tremor_dom_freq_above_3(self):
+    """
+    Return the dominant frequency for the spectrum above 3 Hz
+    """
+
+    dom_freq_above_3 = get_dom_freq(
+        self,
+        3.0,
+        None,
+        include_low=False,
+        include_high=True,
+    )
+
+    return dom_freq_above_3
+
+
+def get_tremor_dom_freq_above_3_ratio_total(self):
+    """
+    Return the ratio of the dominant frequency above 3 Hz to the overall dominant frequency
+    """
+
+    dom_freq_above_3 = get_tremor_dom_freq_above_3(self)
+    dom_freq_total = get_dom_freq(self, None, None)
+
+    if dom_freq_total is None or np.isnan(dom_freq_total) or dom_freq_total == 0:
+        return np.nan
+
+    if dom_freq_above_3 is None or np.isnan(dom_freq_above_3):
+        return np.nan
+
+    return float(dom_freq_above_3 / dom_freq_total)
 
 # ---------------------------------------------------------------------------
 # Feature 2 – Mean Absolute Value per axis
