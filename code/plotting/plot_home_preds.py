@@ -12,8 +12,9 @@ from utils.data_handling_ema_acc import get_ft_daily_mean
 
 
 SES_COLORS = {'ses01': 'violet', 'ses02': 'orange', 'ses03': 'darkcyan'}
-SES_LABELS = {'ses01': 'pre-DBS', 'ses02': 'post-DBS (not optimized)', 'ses03': 'post-DBS'}
-
+SES_LABELS = {'ses01': 'Pre-DBS',
+              'ses02': 'Post-DBS',
+              'ses03': 'Post-DBS\n(optimized)'}
 FONT_SIZES = {
     'title': 16,
     'axes': 14,
@@ -21,6 +22,78 @@ FONT_SIZES = {
 }
 EMA_YTICKS = np.arange(1, 10)
 EMA_YTICK_LABELS = ['1', '', '3', '', '5', '', '7', '', '9']
+
+
+def plot_session_boxes2(
+    test_pred_EMA, test_sessions,
+    ALPHA = .01 / 3,  # Bonferroni correction for three comparisons
+    # SES_COLORS=SES_COLORS, SES_LABELS=SES_LABELS, FS=FS,
+):
+    # plot predicted EMA scores per session as boxplots
+    # with significance stars for differences
+
+    avail_sess = np.unique(test_sessions)
+
+
+    fig, axes = plt.subplots(figsize=(6, 3))
+
+    ax = axes
+    bp = ax.boxplot(
+        [test_pred_EMA[test_sessions == ses] for ses in avail_sess],
+        labels=[SES_LABELS[ses] for ses in avail_sess],
+        patch_artist=True
+    )
+    # make plots pretty
+    for patch, ses in zip(bp['boxes'], avail_sess):
+        patch.set_facecolor(SES_COLORS[ses])  # color boxes with session colors
+        # make median line black and thicker
+        median_line = bp['medians'][avail_sess.tolist().index(ses)]
+        median_line.set_color('black')
+        median_line.set_linewidth(2)
+        # make mean line grey and thinner
+        ses_mean = np.mean(test_pred_EMA[test_sessions == ses])
+        # plot mean as grey line based on calculated means
+        ax.plot([avail_sess.tolist().index(ses) + 1 - 0.15,
+                avail_sess.tolist().index(ses) + 1 + 0.15],
+                [ses_mean, ses_mean],
+                color='k', alpha=.5, linestyle='--', linewidth=1)
+        # plot mean as grey dot based on calculated means
+        ax.plot(avail_sess.tolist().index(ses) + 1, ses_mean, 'o',
+                color='k', markersize=5, alpha=.5,)
+
+    # add sgnificance stars based on Mann-Whitney U test results
+    for i, ses1 in enumerate(avail_sess):
+        for j, ses2 in enumerate(avail_sess):
+            if j <= i:  # only compare each pair once and skip self-comparison
+                continue
+            preds1 = test_pred_EMA[test_sessions == ses1]
+            preds2 = test_pred_EMA[test_sessions == ses2]
+            stat, p_value = mannwhitneyu(preds1, preds2, alternative='two-sided')
+            # if p_value < ALPHA:
+            # add line annotation for significant difference w/ transparency
+            x1, x2 = i + 1, j + 1
+            y, h, col = max(max(preds1), max(preds2)) + 0.5, (i+j)*.25, 'k'
+            if p_value < ALPHA: alph = 1
+            else: alph = 0.3
+            # lines only horizontal between boxes, not vertical to x-axis, and on different y hieghts
+            ax.plot([x1, x2], [y + h, y + h], lw=1.5, c=col, alpha=alph,)
+            # ax.text((x1+x2)*.5, y + (i+j)*.15 + 0.05, "*", ha='center', va='bottom', color=col)
+
+
+    # edit axes and ticks
+    # ax.set_title('Predicted EMA Scores per Session', fontsize=FS)
+    ax.set_ylim(1, 9.1)
+    ax.set_yticks(np.arange(1, 10, 2))
+    ax.set_ylabel('Predicted Tremor Severity\n(EMA score)', fontsize=FONT_SIZES['axes'])
+    ax.tick_params(axis='both', which='major', labelsize=FONT_SIZES['ticks'],)
+    # make upper and right spines invisible
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.tight_layout()
+
+    plt.show()
+
 
 
 def box_fullsession_preds(

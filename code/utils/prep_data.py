@@ -10,6 +10,32 @@ import numpy as np
 from itertools import product
 
 
+def get_day_from_str(s):
+    d = s.split(' ')[0]
+    return d
+
+
+def get_daytime_block_from_str(
+    s, blocks = {
+        'morning': ['05', '06', '07', '08', '09', '10',],
+        'noon': ['11', '12', '13',],
+        'afternoon': ['14', '15', '16', '17', '18'],
+        'evening': ['19', '20', '21', '22', '23', '00', ]
+    },
+    RETURN_NUM=False,
+):
+    h = s.split(' ')[1].split(':')[0]  # get hour, can be used to define blocks of time during the day (morning, afternoon, evening)
+    # get hour in two digit format
+    h = h.zfill(2)
+    for i_block, (block, hours) in enumerate(blocks.items()):
+        if h in hours:
+            if RETURN_NUM:
+                return i_block
+            return block
+    print(f'Hour {h} not found in any block. Returning None.')            
+    return None
+
+
 
 def get_subscores(df, dType, score_type='brady',):
     sel = {}
