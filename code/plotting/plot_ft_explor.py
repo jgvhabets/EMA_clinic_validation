@@ -10,8 +10,8 @@ from utils.pred_utils import check_skewness
 
 def plot_ft_distribution(
     ft_df, ft_name, EMA_ref,
-    sub_id, SES, FT_TYPE, FT_PARAMS_VERSION,
-    save_plot=False,
+    sub_id, FT_TYPE, FT_PARAMS_VERSION,
+    SES=None, save_plot=False,
 ):
     
     

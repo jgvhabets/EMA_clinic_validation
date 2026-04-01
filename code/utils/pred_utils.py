@@ -145,6 +145,7 @@ def full_preproc_X_y_regr(
     return_skew_feat_bool=False,
     return_trained_pca=False,
     adjust_session_list=None,
+    adjust_timestamp_list=None,
 ):
     # define features to include
     PRED_FTS = get_keys_incl(df.keys(), excl_hr=EXCL_HR,)
@@ -186,6 +187,8 @@ def full_preproc_X_y_regr(
     # adjust given session ids to nan-rows removed
     if isinstance(adjust_session_list, list):
         adjust_session_list = list(compress(adjust_session_list, ~nan_rows))
+    if isinstance(adjust_timestamp_list, list):
+        adjust_timestamp_list = list(compress(adjust_timestamp_list, ~nan_rows))
 
         
     ### REMOVE OUTLIERS BASED ON Z SCORE THRESHOLD
@@ -202,7 +205,8 @@ def full_preproc_X_y_regr(
 
     if isinstance(adjust_session_list, list):
         adjust_session_list = list(compress(adjust_session_list, ~outlier_mask))
-
+    if isinstance(adjust_timestamp_list, list):
+        adjust_timestamp_list = list(compress(adjust_timestamp_list, ~outlier_mask))
         
     print(f'X shape after removing outliers (n={sum(outlier_mask)}): {X_all.shape}')
 
@@ -236,7 +240,8 @@ def full_preproc_X_y_regr(
 
     if isinstance(adjust_session_list, list):
         output['session_ids'] = np.array(adjust_session_list)
-    
+    if isinstance(adjust_timestamp_list, list):
+        output['timestamps'] = np.array(adjust_timestamp_list)
     if return_trained_pca:
         output['pca'] = fitted_pca
 

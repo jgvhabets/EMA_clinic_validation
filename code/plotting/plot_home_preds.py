@@ -23,11 +23,13 @@ FONT_SIZES = {
 EMA_YTICKS = np.arange(1, 10)
 EMA_YTICK_LABELS = ['1', '', '3', '', '5', '', '7', '', '9']
 
+USECASE_FIG_DIR = os.path.join(get_onedrive_path('figures'), 'usecase_preds')
+
 
 def plot_session_boxes2(
-    test_pred_EMA, test_sessions,
+    test_pred_EMA, test_sessions, Y_SYMPTOM=None,
     ALPHA = .01 / 3,  # Bonferroni correction for three comparisons
-    # SES_COLORS=SES_COLORS, SES_LABELS=SES_LABELS, FS=FS,
+    SAVEFIG=False, FIGNAME='session_boxplots', ext='png', subfolder=None,
 ):
     # plot predicted EMA scores per session as boxplots
     # with significance stars for differences
@@ -84,13 +86,19 @@ def plot_session_boxes2(
     # ax.set_title('Predicted EMA Scores per Session', fontsize=FS)
     ax.set_ylim(1, 9.1)
     ax.set_yticks(np.arange(1, 10, 2))
-    ax.set_ylabel('Predicted Tremor Severity\n(EMA score)', fontsize=FONT_SIZES['axes'])
+    ylabel = 'Predicted EMA Score' if Y_SYMPTOM is None else f'Predicted {Y_SYMPTOM}\n(EMA scale)'
+    ax.set_ylabel(ylabel, fontsize=FONT_SIZES['axes'])
     ax.tick_params(axis='both', which='major', labelsize=FONT_SIZES['ticks'],)
     # make upper and right spines invisible
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
+
+    if SAVEFIG:
+        dir = os.path.join(USECASE_FIG_DIR, subfolder) if subfolder else USECASE_FIG_DIR
+        plt.savefig(os.path.join(dir, f'{FIGNAME}.{ext}'),
+                    dpi=300, facecolor='w',)
 
     plt.show()
 
@@ -261,6 +269,100 @@ tempdf = ft_extr.get_feat_df_for_pred(
                     color=SES_COLORS[ses_id],)
 """
 
+def plot_pca_with_clusters(X_pca, y, labels, cluster_method,
+                           SHOWFIG=True, SAVEFIG=True, ext='png',
+                           FIGNAME='PC_scatter_clusters_kmeans',):
+    """PCA scatter (PC1 vs PC2, PC1 vs PC3) with Voronoi-style cluster background.
+
+    Background regions are determined by the nearest cluster centroid in the
+    projected 2D space. Points are colour-coded by y (EMA score).
+
+    Parameters
+    ----------
+    X_pca          : ndarray, shape (n_samples, n_components), PCA-transformed features
+    y              : ndarray, EMA scores aligned with X_pca rows
+    labels         : ndarray of int, cluster assignments aligned with X_pca rows
+    cluster_method : str, used only for the subplot title
+    """
+    unique_labels = np.unique(labels[labels != -1])
+    n_clusters = len(unique_labels)
+    n_pcs = X_pca.shape[1]
+
+    # two equal-width axes + dedicated narrow colorbar column
+    fig = plt.figure(figsize=(11, 4),)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1, 1, 0.05], wspace=0.15)
+    ax0 = fig.add_subplot(gs[0, 0])
+    axes = [ax0, fig.add_subplot(gs[0, 1], sharey=ax0)]
+    cax = fig.add_subplot(gs[0, 2])
+
+    for i_ax, pc_idx in enumerate([1, 2]):
+        ax = axes[i_ax]
+
+        if pc_idx >= n_pcs:
+            ax.set_visible(False)
+            continue
+
+        # cluster centroids: x = PC-{pc_idx+1}, y = PC-1
+        centroids_2d = np.array([
+            [X_pca[labels == c, pc_idx].mean(), X_pca[labels == c, 0].mean()]
+            for c in unique_labels
+        ])
+        cluster_mean_ema = np.array([y[labels == c].mean() for c in unique_labels])
+
+        # mesh grid for background shading
+        margin = 0.5
+        x_min = X_pca[:, pc_idx].min() - margin
+        x_max = X_pca[:, pc_idx].max() + margin
+        yc_min = X_pca[:, 0].min() - margin
+        yc_max = X_pca[:, 0].max() + margin
+        xx, yy = np.meshgrid(
+            np.linspace(x_min, x_max, 300),
+            np.linspace(yc_min, yc_max, 300),
+        )
+        mesh_pts = np.c_[xx.ravel(), yy.ravel()]
+        dists = np.linalg.norm(mesh_pts[:, None] - centroids_2d[None], axis=2)
+        mesh_labels = np.argmin(dists, axis=1).reshape(xx.shape)
+
+        ax.pcolormesh(xx, yy, mesh_labels, cmap='Set2', alpha=0.3,
+                      vmin=-0.5, vmax=n_clusters - 0.5, shading='auto')
+
+        im = ax.scatter(X_pca[:, pc_idx], X_pca[:, 0], c=y, cmap='viridis',
+                        edgecolor=None, zorder=2, s=50, alpha=0.7,)
+
+        # annotate each cluster region with its mean EMA (μ)
+        for cx, cy, mu in zip(centroids_2d[:, 0], centroids_2d[:, 1], cluster_mean_ema):
+           if i_ax !=0: continue  # only annotate on PC1 vs PC2 plot to avoid overlap
+           if cx < -.5: cx -= 1
+           elif cx > 0.5: cx = 1 + cx
+           if cy < -0.5: cy -= 1
+           elif cy > 0.5: cy = 1 + cy
+           ax.text(cx, cy, f'μ-EMA={mu:.1f}', ha='center', va='center',
+                    fontsize=FONT_SIZES['ticks'], fontweight='bold',
+                    color='black', zorder=3,
+                    bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.6, ec='none'))
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(yc_min, yc_max)
+        ax.set_xlabel(f'Principal Component {pc_idx + 1}', fontsize=FONT_SIZES['axes'],)
+        if i_ax == 0: ax.set_ylabel('Principal Component 1', fontsize=FONT_SIZES['axes'],)
+        # ax.set_title(f'PC-{pc_idx + 1} vs PC-1 ({cluster_method} clusters)',
+        #              fontsize=FONT_SIZES['title'],)
+        ax.tick_params(labelsize=FONT_SIZES['ticks']-2, size=FONT_SIZES['ticks']-2, axis='both',)
+
+    im.set_clim(1, 9)
+    cbar = fig.colorbar(im, cax=cax, label='Tremor score')
+    cbar.set_label('Tremor score', fontsize=FONT_SIZES['axes'])
+
+    plt.tight_layout()
+
+    if SAVEFIG:
+        plt.savefig(os.path.join(USECASE_FIG_DIR, 'tremor', f'{FIGNAME}.{ext}'),
+                    dpi=300, facecolor='w', bbox_inches='tight')
+
+    if SHOWFIG: plt.show()
+    else: plt.close()
+
+
 def scatter_preds(
     y, y_pred_total,
     ZSCORE_Y=False,
@@ -311,10 +413,8 @@ def scatter_preds(
     plt.tight_layout()
 
     if save:
-        plt.savefig(
-            os.path.join(get_onedrive_path('figures'), f'proof_kin_pred', FIGNAME),
-                dpi=300, facecolor='w',
-            )
+        plt.savefig(os.path.join(USECASE_FIG_DIR, f'{FIGNAME}.{ext}'),
+                    dpi=300, facecolor='w', bbox_inches='tight')
 
     if show: plt.show()
     else: plt.close()

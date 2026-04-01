@@ -15,6 +15,7 @@ from utils.pred_utils import (
     check_skewness,
     remove_outliers_zscore
 )
+from plotting.plot_home_preds import plot_pca_with_clusters
 
 
 
@@ -140,7 +141,11 @@ def run_clustering(
     if cluster_method == 'both':
         if verbose: print('\n##### compare forest vs kmeans clusters:')
         if verbose: print('ARI:', compare_cluster_solutions(labels_kmeans, labels_forest))
-    
+
+    if USE_PCA and plot_pca:
+        (plot_labels, clust_meth) = (labels_kmeans, 'kmeans') if cluster_method in ['kmeans', 'both'] else (labels_forest, 'forest')
+        plot_pca_with_clusters(X, y, plot_labels, cluster_method=clust_meth)
+
     return output
 
 
